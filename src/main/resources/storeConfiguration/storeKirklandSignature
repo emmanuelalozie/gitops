@@ -1,0 +1,62 @@
+{
+    "tenant": {
+        "name": "Kirkland Signature Corporation",
+        "tenantId": "3308004",
+        "address": {
+            "street": "345 Jane St",
+            "city": "New York",
+            "state": "NY",
+            "zip": "10002"
+        },
+        "employees": [
+            {
+                "name": "Jane Doe",
+                "age": 22,
+                "position": "Manager"
+            },
+            {
+                "name": "John Smith",
+                "age": 53,
+                "position": "Developer"
+            }
+        ]
+    },
+    "products": [
+        {
+            "name": "Product C",
+            "price": 19.99,
+            "category": "Electronics"
+        },
+        {
+            "name": "Product D",
+            "price": 9.99,
+            "category": "Home & Kitchen"
+        }
+    ],
+    "orders": [
+        {
+            "id": "54321",
+            "date": "2022-01-01",
+            "items": [
+                {
+                    "name": "Product C",
+                    "quantity": 2
+                },
+                {
+                    "name": "Product D",
+                    "quantity": 1
+                }
+            ]
+        },
+        {
+            "id": "78852",
+            "date": "2022-01-02",
+            "items": [
+                {
+                    "name": "Product E",
+                    "quantity": 3
+                }
+            ]
+        }
+    ]
+}
