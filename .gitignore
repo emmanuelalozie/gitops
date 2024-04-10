@@ -1,0 +1,8 @@
+# Ignore .grade directory
+.grade/
+
+# Ignore .vscode directory
+.vscode/
+
+# Ignore build directory
+build/
