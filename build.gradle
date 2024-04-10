@@ -1,0 +1,11 @@
+apply plugin: 'java'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'io.rest-assured:rest-assured:5.4.0' // Adjust version as necessary
+    compileOnly 'org.projectlombok:lombok:1.18.20' // Adjust version as necessary
+    annotationProcessor 'org.projectlombok:lombok:1.18.20' // For Lombok annotations processing
+}
