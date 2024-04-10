@@ -13,4 +13,4 @@ GitOps is a set of practices that uses Git pull requests to manage infrastructur
 
 - **JSON Configurations**: Sample JSON files that define the infrastructure and application configurations. These can be used to set up services, databases, and other necessary components for an application. Here I use a simple JSONPlaceholder to retrieve user details and store them to a .properties file. Realistically data of this type are not stored here - tenant configurations, metrics, etc, would typically be stored here. 
 
-- **Java Scripts**: Java-based scripts for sending configuration data to a database, automating the process of infrastructure setup and application deployment.
+- **Java Scripts**: Java-based scripts for retrieving, downloading, and comparing configuration data against the database, ensuring consistency and improving efficiency. Scripts can as well be implemented to upload to a database, helping to streamline infrastructure setup and application deployment.
