@@ -5,7 +5,9 @@ repositories {
 }
 
 dependencies {
-    implementation 'io.rest-assured:rest-assured:5.4.0' // Adjust version as necessary
-    compileOnly 'org.projectlombok:lombok:1.18.20' // Adjust version as necessary
-    annotationProcessor 'org.projectlombok:lombok:1.18.20' // For Lombok annotations processing
+    implementation 'io.rest-assured:rest-assured:5.4.0'
+    implementation 'org.json:json:20240303'
+    implementation 'org.apache.commons:commons-configuration2:2.9.0'
+    compileOnly 'org.projectlombok:lombok:1.18.20'
+    annotationProcessor 'org.projectlombok:lombok:1.18.20'
 }
