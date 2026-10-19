@@ -68,8 +68,13 @@ public final class Main {
                 case "fetch" -> fetch(load(configRoot, options, "--target"));
                 default -> throw new IllegalArgumentException("Unknown command '" + args[0] + "'\n" + USAGE);
             };
-        } catch (RuntimeException e) {
-            err.println("error: " + e.getMessage());
+        } catch (Exception e) {
+            // RESTAssured rethrows connection errors unchecked, so they arrive here as checked exceptions.
+            if (e instanceof java.net.ConnectException) {
+                err.println("error: can't connect to the live system (" + e.getMessage() + "). Is it running?");
+            } else {
+                err.println("error: " + (e.getMessage() == null ? e.toString() : e.getMessage()));
+            }
             return ERROR;
         }
     }
