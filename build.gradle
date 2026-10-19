@@ -3,8 +3,7 @@ plugins {
 }
 
 group = 'gitops'
-// Releases set the version from the tag: -PreleaseVersion=1.2.3
-version = findProperty('releaseVersion') ?: '0.1.0'
+version = '0.1.0'
 
 java {
     toolchain {
@@ -29,23 +28,6 @@ dependencies {
     testImplementation 'org.assertj:assertj-core:3.27.7'
 }
 
-// A self-contained jar for releases: java -jar gitops-<version>-all.jar plan --target prod
-tasks.register('cliJar', Jar) {
-    group = 'distribution'
-    description = 'Builds a runnable jar with every dependency inside.'
-    archiveClassifier = 'all'
-    manifest {
-        attributes 'Main-Class': 'gitops.Main', 'Implementation-Version': project.version
-    }
-    from sourceSets.main.output
-    dependsOn configurations.runtimeClasspath
-    from {
-        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
-    }
-    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA', 'META-INF/versions/*/module-info.class', 'module-info.class'
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-}
-
 tasks.named('test') {
     useJUnitPlatform()
     testLogging {
@@ -62,7 +44,6 @@ tasks.named('test') {
 //   ./gradlew applyConfig -Ptarget=dev       make the live system match Git
 //   ./gradlew snapshot -Ptarget=prod         import live state into Git (bootstrap)
 //   ./gradlew fetch -Ptarget=prod            print live state
-//   ./gradlew promote -Pfrom=dev -Pto=prod   copy desired state between environments
 // Extra CLI flags can be passed with -Pargs="--format markdown --out plan.md".
 // ---------------------------------------------------------------------------
 
@@ -88,5 +69,3 @@ gitopsTask('detectDrift', 'Fails if the live system has drifted from Git.', ['pl
 gitopsTask('applyConfig', 'Reconciles the live system to match Git.', ['apply'] + targetArgs)
 gitopsTask('snapshot', 'Writes the live state of the target into Git.', ['snapshot'] + targetArgs)
 gitopsTask('fetch', 'Prints the live state of the target.', ['fetch'] + targetArgs)
-gitopsTask('promote', 'Copies desired state from one environment to another.',
-        ['promote', '--from', project.findProperty('from') ?: 'dev', '--to', project.findProperty('to') ?: 'prod'])

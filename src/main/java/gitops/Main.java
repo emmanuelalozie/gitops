@@ -28,7 +28,6 @@ public final class Main {
     private static final Set<String> FLAGS = Set.of("--fail-on-drift", "--allow-delete-all", "--skip-without-token");
     private static final String USAGE = """
             Usage: gitops <command> [options]
-              version                                       print the version
               validate [--target NAME]                      validate config against the schemas
               plan --target NAME [--fail-on-drift]          show what apply would change
                    [--format text|markdown] [--out FILE]
@@ -37,7 +36,6 @@ public final class Main {
             target requires a token (tokenRequired in target.json) and its variable isn't set
               snapshot --target NAME                        write live state into Git
               fetch --target NAME                           print live state
-              promote --from NAME --to NAME                 copy desired state between environments
             Common: --config-dir DIR (default: config)""";
 
     private final PrintStream out;
@@ -53,11 +51,6 @@ public final class Main {
     }
 
     int run(String[] args) {
-        if (args.length > 0 && (args[0].equals("--version") || args[0].equals("version"))) {
-            String version = Main.class.getPackage().getImplementationVersion();
-            out.println("gitops " + (version == null ? "(development build)" : version));
-            return OK;
-        }
         if (args.length == 0 || args[0].equals("--help") || args[0].equals("help")) {
             out.println(USAGE);
             return args.length == 0 ? ERROR : OK;
@@ -73,7 +66,6 @@ public final class Main {
                         : apply(load(configRoot, options, "--target"), options.containsKey("--allow-delete-all"));
                 case "snapshot" -> snapshot(load(configRoot, options, "--target"));
                 case "fetch" -> fetch(load(configRoot, options, "--target"));
-                case "promote" -> promote(load(configRoot, options, "--from"), load(configRoot, options, "--to"));
                 default -> throw new IllegalArgumentException("Unknown command '" + args[0] + "'\n" + USAGE);
             };
         } catch (RuntimeException e) {
@@ -170,11 +162,6 @@ public final class Main {
         ArrayNode array = Json.MAPPER.createArrayNode();
         target.provider().list().forEach(array::add);
         out.println(array.toPrettyString());
-        return OK;
-    }
-
-    private int promote(Target from, Target to) {
-        Promoter.promote(from, to, out);
         return OK;
     }
 

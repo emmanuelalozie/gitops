@@ -8,7 +8,7 @@
 
 GitOps is a small infrastructure-as-code tool written in Java with Gradle and RESTAssured. The desired state of each system lives in JSON files under `config/`. The tool compares them with what is actually running, shows the difference as a plan, and applies it, and GitHub Actions runs it on every pull request, on every merge and once a day. Today it manages users in a JSONPlaceholder-style API (a stand-in for tenants, accounts or feature flags) and this repository's own GitHub setup: its issue labels, its settings and topics, and the protection rule on `develop`.
 
-[How to use it](#how-to-use-it) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Configuration](#configuration) · [Workflows](#workflows) · [Releases](#releases) · [Extending it](#extending-it)
+[How to use it](#how-to-use-it) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Configuration](#configuration) · [Workflows](#workflows) · [Extending it](#extending-it)
 
 [![CI](https://github.com/emmanuelalozie/gitops/actions/workflows/ci.yml/badge.svg)](https://github.com/emmanuelalozie/gitops/actions/workflows/ci.yml) ![Java](https://img.shields.io/badge/Java-21-f59e0b) ![Gradle](https://img.shields.io/badge/Gradle-9.8-02303a) ![HTTP](https://img.shields.io/badge/HTTP-RESTAssured%206.1-6db33f) ![Source of truth](https://img.shields.io/badge/source%20of%20truth-Git-2563eb)
 
@@ -23,8 +23,8 @@ GitOps is a small infrastructure-as-code tool written in Java with Gradle and RE
 - **Bad config never reaches a live system.** Every file is checked against a JSON Schema, its file name must match its key, and ids must be unique. All problems are reported at once, and plan and apply refuse to run until they're fixed. A missing config folder is an error, and apply refuses to delete every live resource because Git has none unless you pass `--allow-delete-all`.
 - **Apply checks its own work.** After applying, it plans again and fails if anything still differs, so a change that the API quietly ignored doesn't look like a success.
 - **Drift gets noticed.** Once a day the live systems are compared with Git. If someone changed one by hand, an issue labelled `drift` opens with the plan, and it closes itself once they match again.
-- **Prod changes are tested first.** `dev` runs against a local mock API that CI builds from scratch on every pull request, applies and verifies. The promotion workflow copies `dev` to `prod` as a pull request of its own.
-- **It only touches what it manages.** Only fields declared in the schema are compared, so a user's address or a label's URL is ignored. With `prune` off, live resources that aren't in Git are listed and left alone. Caveat: JSONPlaceholder, the `prod` users API, accepts writes but never stores them. Git matches its data today, but after any change to `config/prod/users` the apply can't be verified and the daily drift check keeps reporting that change, because JSONPlaceholder never keeps it. [A real API for prod](#a-real-api-for-prod) fixes this: `server/` is one that stores what you write, ready to deploy.
+- **Changes are tested first.** `dev` runs against a local mock API that CI builds from scratch on every pull request, applies and verifies.
+- **It only touches what it manages.** Only fields declared in the schema are compared, so a user's address or a label's URL is ignored. With `prune` off, live resources that aren't in Git are listed and left alone. Caveat: JSONPlaceholder, the `prod` users API, accepts writes but never stores them. Git matches its data today, but after any change to `config/prod/users` the apply can't be verified and the daily drift check keeps reporting that change, because JSONPlaceholder never keeps it. Pointing `prod` at an API that stores data fixes this.
 
 ## How to use it
 
@@ -34,7 +34,6 @@ GitOps is a small infrastructure-as-code tool written in Java with Gradle and RE
 2. **Check it locally.** `./gradlew validateConfig` checks the schemas, and `./gradlew plan -Ptarget=dev` shows what would change (see [Quick start](#quick-start)).
 3. **Open a pull request.** CI builds, tests, validates and runs a full apply against the mock, and the Plan workflow comments with what will change in `prod` and `github`.
 4. **Merge it.** The Apply workflow makes the live systems match Git, after an approval if the `production` environment asks for one.
-5. **Promote.** When `dev` is right, run *Promote dev to prod* in the Actions tab and merge the pull request it opens.
 
 <br clear="right" />
 
@@ -48,7 +47,6 @@ GitOps is a small infrastructure-as-code tool written in Java with Gradle and RE
 | Make the live system match Git by hand | `./gradlew applyConfig -Ptarget=<target>`, or run the Apply workflow |
 | Start managing a system that already has data | `./gradlew snapshot -Ptarget=<target>` writes its live state into Git |
 | Look at the live state | `./gradlew fetch -Ptarget=<target>` |
-| Copy `dev` to `prod` | The *Promote dev to prod* workflow, or `./gradlew promote -Pfrom=dev -Pto=prod` |
 | Check for drift now instead of waiting a day | Run the *Drift detection* workflow |
 
 <details>
@@ -78,8 +76,6 @@ docker compose up -d                     # the dev users API, on http://localhos
 ./gradlew detectDrift -Ptarget=dev       # passes: nothing left to change
 ```
 
-Or skip the build: download `gitops-<version>-all.jar` from the [latest release](https://github.com/emmanuelalozie/gitops/releases/latest) and run `java -jar gitops-<version>-all.jar plan --target prod` from a checkout, since the config lives in the repository.
-
 The default branch is `develop`. On Windows use `.\gradlew.bat` instead of `./gradlew`. The mock starts out as a live system someone edited by hand (Bret and Elwyn.Skiles have the wrong ids, Karianne's email and Maxime_Nienow's phone were changed, and Moriah.Stanton was renamed), so the first plan shows six changes and the apply fixes them. Without Docker, start the mock with `cp mock/db.json /tmp/db.json && npx json-server@0.17.4 --port 3000 /tmp/db.json`; both ways copy the seed first, so applying never edits `mock/db.json`.
 
 <details>
@@ -87,7 +83,7 @@ The default branch is `develop`. On Windows use `.\gradlew.bat` instead of `./gr
 
 - **Tests** use JUnit 6, AssertJ and [WireMock](https://wiremock.org) for the APIs, so they never call a live system. The report is in `build/reports/tests/test/index.html`.
 - **Extra CLI flags** go through `-Pargs`, for example `./gradlew plan -Ptarget=prod -Pargs="--format markdown --out plan.md"` for the Markdown the pull request comment uses.
-- **Running the CLI directly:** `gitops.Main` (or the release jar) takes `validate`, `plan`, `apply`, `snapshot`, `fetch`, `promote` and `version`, plus `--config-dir` to point at another folder. `help` lists the options.
+- **Running the CLI directly:** `gitops.Main` takes `validate`, `plan`, `apply`, `snapshot` and `fetch`, plus `--config-dir` to point at another folder. `help` lists the options.
 
 </details>
 
@@ -100,8 +96,6 @@ The default branch is `develop`. On Windows use `.\gradlew.bat` instead of `./gr
 | `./gradlew applyConfig -Ptarget=<t>` | Makes the live system match Git, then verifies it |
 | `./gradlew snapshot -Ptarget=<t>` | Writes the live state into `config/<t>/` |
 | `./gradlew fetch -Ptarget=<t>` | Prints the live state as JSON |
-| `./gradlew promote -Pfrom=dev -Pto=prod` | Copies desired state from one environment to another |
-| `./gradlew cliJar` | Builds the runnable jar in `build/libs/` |
 
 `-Ptarget` has no default, so forgetting it stops with an error instead of quietly changing `prod`.
 
@@ -126,7 +120,7 @@ flowchart LR
 | **Build** | [Gradle 9.8](https://gradle.org) wrapper, with one `JavaExec` task per command |
 | **HTTP** | [RESTAssured 6.1](https://rest-assured.io) |
 | **JSON and validation** | [Jackson](https://github.com/FasterXML/jackson) and [json-schema-validator](https://github.com/networknt/json-schema-validator) (JSON Schema 2020-12) |
-| **Users APIs** | [json-server](https://github.com/typicode/json-server) 0.17.4: the mock in `mock/`, and the deployable server in `server/` |
+| **Mock API** | [json-server](https://github.com/typicode/json-server) 0.17.4, with Docker Compose |
 | **Automation** | GitHub Actions |
 | **Tests** | JUnit 6, AssertJ and WireMock |
 
@@ -142,7 +136,6 @@ Git holds the desired state, and the engine never trusts anything else: every co
 | `Planner.java`, `Plan.java` | Compares desired with live and lists the changes |
 | `PlanRenderer.java` | The plan as terminal text or as Markdown for pull requests |
 | `Applier.java` | Carries out a plan, deletes first |
-| `Promoter.java` | Copies desired state between environments |
 | `Json.java` | Shared Jackson setup, so files are always written the same way |
 | `providers/UsersProvider.java` | `GET`, `POST`, `PATCH` and `DELETE` on `/users` |
 | `providers/GitHubProvider.java` | Shared setup for the GitHub providers: headers, token, paging |
@@ -151,7 +144,6 @@ Git holds the desired state, and the engine never trusts anything else: every co
 | `providers/GitHubBranchProtectionProvider.java` | Branch protection, flattened from GitHub's nested shape into one checklist per branch |
 | `providers/Http.java`, `ApiException.java` | RESTAssured setup, and an error naming the request whenever a status isn't 2xx |
 | `src/main/resources/schemas/` | One schema per kind: users, labels, repository, branch-protection |
-| `server/` | The users API for a real prod: json-server, a persistent data file, and a token check on writes |
 
 All Java classes are under `src/main/java/gitops`.
 
@@ -159,14 +151,14 @@ All Java classes are under `src/main/java/gitops`.
 
 **Applying.** Apply always validates and plans first, prints the plan, and then runs it. Any status outside 2xx stops it with the method, URL, status and response body. With `verifyAfterApply` on, it plans once more and fails with the remaining drift if there is any.
 
-**Security.** The only secret is `GITHUB_TOKEN`, read from the environment and sent only to the GitHub API. Workflows ask for the least they need: `contents: read` everywhere, `issues: write` only where labels or drift issues are written, and `pull-requests: write` only for the plan comment and promotion. Pull requests from forks get the plan in the job summary instead of a comment.
+**Security.** Tokens come only from the environment and are sent only to the GitHub API: the workflow's own `GITHUB_TOKEN` for labels, and `GITOPS_ADMIN_TOKEN`, a secret you create, for repository settings and branch protection. Workflows ask for the least they need: `contents: read` everywhere, `issues: write` only where labels or drift issues are written, and `pull-requests: write` only for the plan comment. Pull requests from forks get the plan in the job summary instead of a comment.
 
 <details>
 <summary><strong>How this project is built</strong></summary>
 
 - **Pull requests:** CI (`.github/workflows/ci.yml`) runs `./gradlew build validateConfig` on JDK 21, then starts the mock, applies `dev` and fails if any drift remains.
 - **Reviews:** `CODEOWNERS` asks the owner to review every change, the pull request template asks for the plan to be read, and Dependabot proposes Gradle and Actions updates weekly.
-- **Releases:** tags `v1.2.3` build a runnable jar and publish it, see [Releases](#releases).
+- **Releases:** none. Run it from a checkout with `./gradlew`.
 
 </details>
 
@@ -198,7 +190,6 @@ Each folder under `config/` with a `target.json` is a target. Its resources are 
 | `GITOPS_<TARGET>_BASE_URL` | the target's `baseUrl` | Points one users target at another API without editing the file, for example `GITOPS_DEV_BASE_URL`. It's per target, so an override for `dev` can never move `prod`. |
 | `GITHUB_TOKEN` | unset | Sent to the GitHub API for labels. Reading them on a public repository works without it; changing them needs it. |
 | `GITOPS_ADMIN_TOKEN` | unset | For `github-repo` and `github-branches`: a token with admin rights on the repository, which the workflows' own token doesn't have. |
-| `GITOPS_PROD_USERS_TOKEN` | unset | Sent to the prod users API as a bearer token. JSONPlaceholder ignores it; `server/` requires it for writes. |
 | `GITHUB_API_URL` | `https://api.github.com` | For GitHub Enterprise Server |
 
 <details>
@@ -235,31 +226,13 @@ Each folder under `config/` with a `target.json` is a target. Its resources are 
 | `plan.yml` | Pull requests that touch `config/`, `src/` or `build.gradle` | Plans `prod`, `github`, `github-repo` and `github-branches` and keeps one comment on the pull request up to date |
 | `apply.yml` | Pushes to `develop` that touch the config of those targets, or by hand | Applies them in the `production` environment, one at a time |
 | `drift.yml` | Daily at 06:17 UTC, or by hand | Plans each target, opens or updates a `drift` issue when they differ, and closes it once they match |
-| `promote.yml` | By hand | Copies `config/dev/users` to `config/prod/users` and opens a pull request |
-| `release.yml` | A pushed `v1.2.3` tag, or by hand with a version | Builds, tests and publishes a GitHub release with the runnable jar and its SHA-256 |
 
 Branch protection on `develop` and the repository's settings are in Git (`config/github-branches/`, `config/github-repo/`). The rule on `develop` is set up for one maintainer: changes need a pull request with both CI checks passing, but no approvals, since GitHub doesn't let you approve your own pull request, and admins can still bypass it in an emergency.
 
 A few things still live in GitHub's settings, because changing them needs more than the tool can be given:
 
-- **Secrets** (Settings > Secrets and variables > Actions):
-  - `GITOPS_ADMIN_TOKEN`: a [fine-grained token](https://github.com/settings/personal-access-tokens/new) for this repository with *Administration: Read and write*. Without it, the settings and branch protection targets are skipped with a notice.
-  - `GITOPS_PROD_USERS_TOKEN`: only once prod runs on `server/`, the same value as its `API_TOKEN`.
-  - `PROMOTE_TOKEN` (optional): so promotion pull requests start CI and the plan comment.
+- **The `GITOPS_ADMIN_TOKEN` secret** (Settings > Secrets and variables > Actions): a [fine-grained token](https://github.com/settings/personal-access-tokens/new) for this repository with *Administration: Read and write*. Without it, the settings and branch protection targets are skipped with a notice.
 - **The `production` environment** (Settings > Environments): add yourself as a required reviewer so applies wait for approval.
-- **Promotion pull requests:** allow Actions to create pull requests (Settings > Actions > General).
-
-### A real API for prod
-
-JSONPlaceholder never stores writes, so applies to `prod` can't be verified. `server/` is a users API that keeps them: json-server with its data file on a volume, seeded with the same users as `config/prod/users`, open for reads and closed to writes without a bearer token.
-
-1. Deploy `server/` anywhere that runs a container with a persistent volume. `server/fly.toml` is ready for [Fly.io](https://fly.io): `fly launch --copy-config --no-deploy`, `fly volumes create gitops_users`, `fly secrets set API_TOKEN=<long random string>`, `fly deploy`.
-2. Save the same token as the `GITOPS_PROD_USERS_TOKEN` secret.
-3. In a pull request, set `baseUrl` in `config/prod/target.json` to the server's URL and `verifyAfterApply` to `true`. The plan comment shows the switch is safe: no changes, because the seed matches Git.
-
-## Releases
-
-Push a tag (`git tag v0.2.0 && git push origin v0.2.0`) or run the *Release* workflow with a version. It runs the build and tests, then publishes `gitops-<version>-all.jar`, which has every dependency inside, with its SHA-256 and generated notes. `java -jar gitops-<version>-all.jar version` prints the version.
 
 ## Extending it
 

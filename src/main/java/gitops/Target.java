@@ -76,16 +76,10 @@ public record Target(String name, Path dir, Kind kind, boolean prune, boolean ve
         };
     }
 
-    /**
-     * The environment variable holding this target's API token: "tokenEnv" in target.json, otherwise
-     * GITHUB_TOKEN for GitHub targets and none for users APIs.
-     */
+    /** The environment variable holding this target's GitHub token: "tokenEnv" in target.json, or GITHUB_TOKEN. */
     public String tokenVariable() {
         String configured = settings.path("tokenEnv").asText("");
-        if (!configured.isBlank()) {
-            return configured;
-        }
-        return kind == Kind.USERS ? null : "GITHUB_TOKEN";
+        return configured.isBlank() ? "GITHUB_TOKEN" : configured;
     }
 
     /** True when target.json sets "tokenRequired" and the token variable is empty. */
@@ -94,14 +88,13 @@ public record Target(String name, Path dir, Kind kind, boolean prune, boolean ve
     }
 
     private String token() {
-        String variable = tokenVariable();
-        return variable == null ? null : envOr(variable, null);
+        return envOr(tokenVariable(), null);
     }
 
     public Provider provider() {
         String github = envOr("GITHUB_API_URL", "https://api.github.com");
         return switch (kind) {
-            case USERS -> new UsersProvider(endpoint(), token());
+            case USERS -> new UsersProvider(endpoint());
             case LABELS -> new GitHubLabelsProvider(github, endpoint(), token());
             case REPOSITORY -> new GitHubRepositoryProvider(github, endpoint(), token());
             case BRANCH_PROTECTION -> new GitHubBranchProtectionProvider(github, endpoint(), token());

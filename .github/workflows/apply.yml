@@ -41,6 +41,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Repository settings and branch protection need an admin token; without it those targets are skipped.
           GITOPS_ADMIN_TOKEN: ${{ secrets.GITOPS_ADMIN_TOKEN }}
-          # Only needed once prod points at the API in server/, which protects writes with it.
-          GITOPS_PROD_USERS_TOKEN: ${{ secrets.GITOPS_PROD_USERS_TOKEN }}
         run: ./gradlew applyConfig -Ptarget=${{ matrix.target }} -Pargs=--skip-without-token
