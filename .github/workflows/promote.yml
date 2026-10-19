@@ -14,16 +14,16 @@ jobs:
   promote:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 21
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
       - name: Promote
         run: ./gradlew promote -Pfrom=dev -Pto=prod
       - name: Open a pull request
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           # Pull requests opened with the default GITHUB_TOKEN don't trigger other workflows.
           # Set a PROMOTE_TOKEN secret (fine-grained PAT or app token) to get CI and Plan on them.
