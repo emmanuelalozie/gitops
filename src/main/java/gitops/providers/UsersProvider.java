@@ -16,7 +16,12 @@ public final class UsersProvider implements Provider {
     private final Http http;
 
     public UsersProvider(String baseUrl) {
-        this.http = new Http(baseUrl, Map.of());
+        this(baseUrl, null);
+    }
+
+    /** With a token, every request sends it as a bearer token, for APIs that protect writes. */
+    public UsersProvider(String baseUrl, String token) {
+        this.http = new Http(baseUrl, token == null || token.isBlank() ? Map.of() : Map.of("Authorization", "Bearer " + token));
     }
 
     @Override

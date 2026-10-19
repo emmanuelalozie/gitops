@@ -1,7 +1,8 @@
 {
-  "description": "Production users API. JSONPlaceholder accepts writes but never persists them, so apply is not verified here.",
+  "description": "Production users API. JSONPlaceholder accepts writes but never persists them, so apply is not verified here. To use a real API, deploy server/ and change baseUrl and verifyAfterApply in a pull request (see the README).",
   "kind": "users",
   "baseUrl": "https://jsonplaceholder.typicode.com",
   "prune": true,
-  "verifyAfterApply": false
+  "verifyAfterApply": false,
+  "tokenEnv": "GITOPS_PROD_USERS_TOKEN"
 }

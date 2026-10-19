@@ -18,7 +18,9 @@ import java.util.Locale;
 public enum Kind {
     USERS("users", "username", List.of("id"), false),
     // GitHub treats "Bug" and "bug" as the same label.
-    LABELS("labels", "name", List.of(), true);
+    LABELS("labels", "name", List.of(), true),
+    REPOSITORY("repository", "name", List.of(), false),
+    BRANCH_PROTECTION("branch-protection", "branch", List.of(), false);
 
     private final String id;
     private final String keyField;

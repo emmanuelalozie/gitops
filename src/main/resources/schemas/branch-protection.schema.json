@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/emmanuelalozie/gitops/schemas/branch-protection.schema.json",
+  "title": "Branch protection rule",
+  "description": "The protection rule for one branch. One file per branch in config/<target>/branch-protection/.",
+  "type": "object",
+  "properties": {
+    "branch": { "type": "string", "minLength": 1 },
+    "required_status_checks": {
+      "description": "Check names that must pass before merging, e.g. a workflow job's name.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "strict_status_checks": { "description": "The branch must be up to date with the base before merging.", "type": "boolean" },
+    "require_pull_request": { "description": "Changes must go through a pull request.", "type": "boolean" },
+    "required_approving_review_count": { "type": "integer", "minimum": 0, "maximum": 6 },
+    "require_code_owner_reviews": { "type": "boolean" },
+    "dismiss_stale_reviews": { "type": "boolean" },
+    "enforce_admins": { "description": "Apply the rule to administrators too.", "type": "boolean" },
+    "required_linear_history": { "type": "boolean" },
+    "allow_force_pushes": { "type": "boolean" },
+    "allow_deletions": { "type": "boolean" },
+    "required_conversation_resolution": { "type": "boolean" }
+  },
+  "required": ["branch", "required_status_checks", "strict_status_checks", "require_pull_request",
+    "required_approving_review_count", "require_code_owner_reviews", "dismiss_stale_reviews", "enforce_admins",
+    "required_linear_history", "allow_force_pushes", "allow_deletions", "required_conversation_resolution"],
+  "additionalProperties": false
+}

@@ -51,16 +51,33 @@ public final class Planner {
         return new Plan(name, description, changes, unmanaged);
     }
 
-    /** Only fields present in the desired resource are compared; extra live fields are ignored. */
+    /**
+     * Only fields present in the desired resource are compared; extra live fields are ignored.
+     * Lists (topics, required checks) are compared as sets, since APIs return them in their own order.
+     */
     static List<FieldDiff> diff(ObjectNode desired, ObjectNode live) {
         List<FieldDiff> diffs = new ArrayList<>();
         for (Map.Entry<String, JsonNode> field : desired.properties()) {
             JsonNode current = live.get(field.getKey());
-            if (current == null || !current.equals(field.getValue())) {
+            if (current == null || !same(current, field.getValue())) {
                 diffs.add(new FieldDiff(field.getKey(), current, field.getValue()));
             }
         }
         return diffs;
+    }
+
+    private static boolean same(JsonNode live, JsonNode desired) {
+        if (live.isArray() && desired.isArray()) {
+            return live.size() == desired.size() && sorted(live).equals(sorted(desired));
+        }
+        return live.equals(desired);
+    }
+
+    private static List<String> sorted(JsonNode array) {
+        List<String> items = new ArrayList<>();
+        array.forEach(item -> items.add(item.toString()));
+        items.sort(null);
+        return items;
     }
 
     private static Map<String, ObjectNode> index(List<ObjectNode> resources, Kind kind) {

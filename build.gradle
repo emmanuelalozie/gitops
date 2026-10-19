@@ -3,7 +3,8 @@ plugins {
 }
 
 group = 'gitops'
-version = '0.1.0'
+// Releases set the version from the tag: -PreleaseVersion=1.2.3
+version = findProperty('releaseVersion') ?: '0.1.0'
 
 java {
     toolchain {
@@ -26,6 +27,23 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     testImplementation 'org.wiremock:wiremock-standalone:3.13.2'
     testImplementation 'org.assertj:assertj-core:3.27.7'
+}
+
+// A self-contained jar for releases: java -jar gitops-<version>-all.jar plan --target prod
+tasks.register('cliJar', Jar) {
+    group = 'distribution'
+    description = 'Builds a runnable jar with every dependency inside.'
+    archiveClassifier = 'all'
+    manifest {
+        attributes 'Main-Class': 'gitops.Main', 'Implementation-Version': project.version
+    }
+    from sourceSets.main.output
+    dependsOn configurations.runtimeClasspath
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA', 'META-INF/versions/*/module-info.class', 'module-info.class'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
 tasks.named('test') {

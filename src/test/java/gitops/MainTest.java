@@ -88,6 +88,20 @@ class MainTest {
     }
 
     @Test
+    void targetsWithoutTheirRequiredTokenAreSkippedOnlyWhenAsked() throws Exception {
+        Files.writeString(root.resolve("dev/target.json"), "{\"kind\": \"users\", \"baseUrl\": \"" + api.baseUrl()
+                + "\", \"tokenEnv\": \"GITOPS_TEST_TOKEN_THAT_IS_NEVER_SET\", \"tokenRequired\": true}");
+        Path report = root.resolve("plan.md");
+
+        assertThat(run("plan", "--target", "dev")).isEqualTo(Main.ERROR);
+        assertThat(err.toString()).contains("GITOPS_TEST_TOKEN_THAT_IS_NEVER_SET");
+        assertThat(run("plan", "--target", "dev", "--skip-without-token", "--fail-on-drift", "--out", report.toString()))
+                .isEqualTo(Main.OK);
+        assertThat(report).content().contains("Skipped");
+        api.verify(0, anyRequestedFor(anyUrl()));
+    }
+
+    @Test
     void commandsThatNeedATargetSaySo() {
         assertThat(run("apply")).isEqualTo(Main.ERROR);
         assertThat(err.toString()).contains("--target is required");

@@ -1,0 +1,9 @@
+{
+  "description": "Settings of this repository. Changing them needs a token with admin rights in GITOPS_ADMIN_TOKEN.",
+  "kind": "repository",
+  "repository": "emmanuelalozie/gitops",
+  "prune": false,
+  "verifyAfterApply": true,
+  "tokenEnv": "GITOPS_ADMIN_TOKEN",
+  "tokenRequired": true
+}
