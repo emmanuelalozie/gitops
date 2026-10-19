@@ -81,7 +81,7 @@ Then try the whole loop with one command:
 
 It starts the mock users API from `mock/db.json` (with Node.js, or Docker if Node isn't installed), plans, applies and runs a drift check against the `dev` target, then stops the mock. The mock starts out as a live system someone edited by hand (Bret and Elwyn.Skiles have the wrong ids, Karianne's email and Maxime_Nienow's phone were changed, and Moriah.Stanton was renamed), so the plan shows six changes, the apply fixes them, and the drift check passes. Edit a file in `config/dev/users` and run it again to see your own change planned and applied.
 
-The default branch is `develop`. To run the steps one at a time, start the mock yourself (`docker compose up -d`, or `cp mock/db.json /tmp/db.json && npx json-server@0.17.4 --port 3000 /tmp/db.json`) and use `./gradlew plan`, `applyConfig` and `detectDrift` with `-Ptarget=dev`. Both ways copy the seed first, so applying never edits `mock/db.json`.
+The default branch is `develop`. To run the steps one at a time, start the mock yourself (`docker compose up -d`, or `cp mock/db.json /tmp/db.json && npx json-server@0.17.4 --host 127.0.0.1 --port 3000 /tmp/db.json`) and use `./gradlew plan`, `applyConfig` and `detectDrift` with `-Ptarget=dev`. Both ways copy the seed first, so applying never edits `mock/db.json`.
 
 <details>
 <summary><strong>Development tools</strong></summary>
@@ -176,7 +176,7 @@ Each folder under `config/` with a `target.json` is a target. Its resources are 
 
 | Target | Kind | Live system | `prune` | `verifyAfterApply` |
 | --- | --- | --- | --- | --- |
-| `dev` | users | The json-server mock in `mock/`, on `http://localhost:3000` | on | on |
+| `dev` | users | The json-server mock in `mock/`, on `http://127.0.0.1:3000` | on | on |
 | `prod` | users | `https://jsonplaceholder.typicode.com` | on | off, because writes aren't stored |
 | `github` | labels | This repository, `emmanuelalozie/gitops` | off, so GitHub's default labels stay | on |
 | `github-repo` | repository | This repository's settings and topics | off (settings can't be deleted) | on |

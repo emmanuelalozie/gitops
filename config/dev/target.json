@@ -1,7 +1,7 @@
 {
   "description": "Development users API: the json-server mock in mock/ (docker compose up, or see CI).",
   "kind": "users",
-  "baseUrl": "http://localhost:3000",
+  "baseUrl": "http://127.0.0.1:3000",
   "prune": true,
   "verifyAfterApply": true
 }

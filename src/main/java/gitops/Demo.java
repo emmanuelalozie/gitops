@@ -22,6 +22,8 @@ import java.util.concurrent.TimeUnit;
 public final class Demo {
 
     private static final int PORT = 3000;
+    // Not "localhost": on Windows, Node binds that to IPv6 (::1) while Java connects over IPv4, so they never meet.
+    private static final String HOST = "127.0.0.1";
     private static final String JSON_SERVER = "json-server@0.17.4";
     private static final String CONTAINER = "gitops-demo-mock";
     private static final boolean WINDOWS = System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("win");
@@ -50,12 +52,17 @@ public final class Demo {
                     + " Install either one, or run scripts/doctor to see what's missing.");
             return Main.ERROR;
         }
+        // Stop the mock on Ctrl+C too, so it doesn't keep port 3000 busy.
+        Thread cleanup = new Thread(mock::stop);
+        Runtime.getRuntime().addShutdownHook(cleanup);
         try {
-            System.out.println("Started the mock users API with " + mock.name + " on http://localhost:" + PORT + ".");
+            System.out.println("Starting the mock users API with " + mock.name + " on http://" + HOST + ":" + PORT
+                    + " (the first run downloads json-server, which can take a minute)...");
             if (!waitUntilUp(Duration.ofSeconds(120))) {
-                System.err.println("The mock didn't start. Its output:\n" + Files.readString(log));
+                System.err.println("The mock didn't answer within 2 minutes. Its output:\n" + Files.readString(log));
                 return Main.ERROR;
             }
+            System.out.println("The mock is up.");
             Main main = new Main(System.out, System.err);
             step("1. Plan: the mock starts out edited by hand, so Git and the live state differ");
             if (main.run(new String[] {"plan", "--target", "dev"}) != Main.OK) {
@@ -74,6 +81,7 @@ public final class Demo {
             return Main.OK;
         } finally {
             mock.stop();
+            Runtime.getRuntime().removeShutdownHook(cleanup);
             System.out.println("Stopped the mock.");
         }
     }
@@ -88,7 +96,7 @@ public final class Demo {
     private static Mock start(Path db, Path log) throws IOException {
         if (works(WINDOWS ? "npx.cmd" : "npx", "--version")) {
             Process process = new ProcessBuilder(WINDOWS ? "npx.cmd" : "npx", "--yes", JSON_SERVER,
-                    "--port", String.valueOf(PORT), db.toString())
+                    "--host", HOST, "--port", String.valueOf(PORT), db.toString())
                     .redirectErrorStream(true).redirectOutput(log.toFile()).start();
             return new Mock("Node.js", process, () -> {
                 // npx starts json-server as a child process, which has to be stopped too.
@@ -98,7 +106,7 @@ public final class Demo {
         }
         if (works("docker", "info")) {
             Process process = new ProcessBuilder("docker", "run", "--rm", "--name", CONTAINER,
-                    "-p", PORT + ":" + PORT, "-v", db.getParent().toAbsolutePath() + ":/data",
+                    "-p", HOST + ":" + PORT + ":" + PORT, "-v", db.getParent().toAbsolutePath() + ":/data",
                     "node:20-alpine", "npx", "--yes", JSON_SERVER, "--host", "0.0.0.0", "--port", String.valueOf(PORT),
                     "/data/" + db.getFileName())
                     .redirectErrorStream(true).redirectOutput(log.toFile()).start();
@@ -125,7 +133,7 @@ public final class Demo {
 
     private static boolean portInUse() {
         try (Socket socket = new Socket()) {
-            socket.connect(new InetSocketAddress("localhost", PORT), 500);
+            socket.connect(new InetSocketAddress(HOST, PORT), 500);
             return true;
         } catch (IOException e) {
             return false;
@@ -135,7 +143,7 @@ public final class Demo {
     /** The first start downloads json-server (and with Docker, the Node image), so allow some time. */
     private static boolean waitUntilUp(Duration timeout) throws InterruptedException {
         HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
-        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + PORT + "/users")).build();
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://" + HOST + ":" + PORT + "/users")).build();
         long deadline = System.nanoTime() + timeout.toNanos();
         while (System.nanoTime() < deadline) {
             try {
