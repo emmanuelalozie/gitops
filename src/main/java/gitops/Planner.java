@@ -29,22 +29,24 @@ public final class Planner {
         List<Change> changes = new ArrayList<>();
         List<String> unmanaged = new ArrayList<>();
 
-        for (Map.Entry<String, ObjectNode> entry : index(desired, kind).entrySet()) {
-            ObjectNode current = liveByKey.remove(entry.getKey());
+        for (ObjectNode wanted : index(desired, kind).values()) {
+            String key = wanted.path(kind.keyField()).asText();
+            ObjectNode current = liveByKey.remove(kind.matchKey(wanted));
             if (current == null) {
-                changes.add(new Change(Action.CREATE, entry.getKey(), entry.getValue(), null, List.of()));
+                changes.add(new Change(Action.CREATE, key, wanted, null, List.of()));
                 continue;
             }
-            List<FieldDiff> diffs = diff(entry.getValue(), current);
+            List<FieldDiff> diffs = diff(wanted, current);
             if (!diffs.isEmpty()) {
-                changes.add(new Change(Action.UPDATE, entry.getKey(), entry.getValue(), current, diffs));
+                changes.add(new Change(Action.UPDATE, key, wanted, current, diffs));
             }
         }
-        for (Map.Entry<String, ObjectNode> entry : liveByKey.entrySet()) {
+        for (ObjectNode extra : liveByKey.values()) {
+            String key = extra.path(kind.keyField()).asText();
             if (prune) {
-                changes.add(new Change(Action.DELETE, entry.getKey(), null, entry.getValue(), List.of()));
+                changes.add(new Change(Action.DELETE, key, null, extra, List.of()));
             } else {
-                unmanaged.add(entry.getKey());
+                unmanaged.add(key);
             }
         }
         return new Plan(name, description, changes, unmanaged);
@@ -67,7 +69,7 @@ public final class Planner {
     private static Map<String, ObjectNode> index(List<ObjectNode> resources, Kind kind) {
         Map<String, ObjectNode> byKey = new LinkedHashMap<>();
         for (ObjectNode resource : resources) {
-            byKey.put(resource.path(kind.keyField()).asText(), resource);
+            byKey.put(kind.matchKey(resource), resource);
         }
         return byKey;
     }

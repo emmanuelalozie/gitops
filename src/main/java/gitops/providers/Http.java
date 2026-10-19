@@ -11,6 +11,7 @@ import io.restassured.specification.RequestSpecification;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
 
 import static io.restassured.RestAssured.given;
 
@@ -57,7 +58,7 @@ final class Http {
     private static String expand(String path, Object... params) {
         String result = path;
         for (Object param : params) {
-            result = result.replaceFirst("\\{[^}]+}", String.valueOf(param));
+            result = result.replaceFirst("\\{[^}]+}", Matcher.quoteReplacement(String.valueOf(param)));
         }
         return result;
     }

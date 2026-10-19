@@ -8,6 +8,7 @@ import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * A type of resource this repo can manage. Each kind has a JSON Schema in
@@ -15,18 +16,21 @@ import java.util.List;
  * Git and the live system, and optional fields that must be unique.
  */
 public enum Kind {
-    USERS("users", "username", List.of("id")),
-    LABELS("labels", "name", List.of());
+    USERS("users", "username", List.of("id"), false),
+    // GitHub treats "Bug" and "bug" as the same label.
+    LABELS("labels", "name", List.of(), true);
 
     private final String id;
     private final String keyField;
     private final List<String> uniqueFields;
+    private final boolean caseInsensitiveKeys;
     private JsonNode schema;
 
-    Kind(String id, String keyField, List<String> uniqueFields) {
+    Kind(String id, String keyField, List<String> uniqueFields, boolean caseInsensitiveKeys) {
         this.id = id;
         this.keyField = keyField;
         this.uniqueFields = uniqueFields;
+        this.caseInsensitiveKeys = caseInsensitiveKeys;
     }
 
     public String id() {
@@ -39,6 +43,12 @@ public enum Kind {
 
     public List<String> uniqueFields() {
         return uniqueFields;
+    }
+
+    /** The key of a resource as the live system compares it. */
+    public String matchKey(JsonNode resource) {
+        String key = resource.path(keyField).asText();
+        return caseInsensitiveKeys ? key.toLowerCase(Locale.ROOT) : key;
     }
 
     public synchronized JsonNode schema() {

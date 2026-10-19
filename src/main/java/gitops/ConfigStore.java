@@ -51,15 +51,21 @@ public final class ConfigStore {
     public void replaceAll(List<ObjectNode> resources) {
         Set<Path> written = new HashSet<>();
         for (ObjectNode resource : resources) {
+            String key = resource.path(kind.keyField()).asText();
+            Path file = dir.resolve(fileName(key));
+            if (!written.add(file)) {
+                throw new IllegalArgumentException("Two resources map to " + file.getFileName()
+                        + " (keys that differ only in case or punctuation, such as '" + key + "'); rename one first");
+            }
+        }
+        for (ObjectNode resource : resources) {
             ObjectNode managed = Json.MAPPER.createObjectNode();
             for (String field : kind.fields()) {
                 if (resource.hasNonNull(field)) {
                     managed.set(field, resource.get(field));
                 }
             }
-            Path file = dir.resolve(fileName(resource.path(kind.keyField()).asText()));
-            Json.write(file, managed);
-            written.add(file);
+            Json.write(dir.resolve(fileName(resource.path(kind.keyField()).asText())), managed);
         }
         for (Path file : files()) {
             if (!written.contains(file)) {

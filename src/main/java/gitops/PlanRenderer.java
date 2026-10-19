@@ -49,7 +49,7 @@ public final class PlanRenderer {
             out.append("| Action | Resource | Changes |\n|---|---|---|\n");
             for (Change change : plan.changes()) {
                 out.append("| ").append(symbol(change.action())).append(' ').append(change.action().name().toLowerCase())
-                        .append(" | `").append(change.key()).append("` | ").append(details(change)).append(" |\n");
+                        .append(" | `").append(escape(change.key())).append("` | ").append(details(change)).append(" |\n");
             }
         }
         if (!plan.unmanaged().isEmpty()) {

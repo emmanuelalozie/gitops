@@ -74,6 +74,26 @@ class MainTest {
     }
 
     @Test
+    void applyRefusesToDeleteEverythingUnlessAsked() throws Exception {
+        Files.delete(root.resolve("dev/users/bret.json"));
+        api.stubFor(get("/users").willReturn(okJson("[" + Json.compact(user(1, "Bret", "a@b.io")) + "]")));
+        api.stubFor(delete("/users/1").willReturn(okJson("{}")));
+
+        assertThat(run("apply", "--target", "dev")).isEqualTo(Main.ERROR);
+        assertThat(err.toString()).contains("--allow-delete-all");
+        api.verify(0, deleteRequestedFor(anyUrl()));
+
+        run("apply", "--target", "dev", "--allow-delete-all");
+        api.verify(deleteRequestedFor(urlEqualTo("/users/1")));
+    }
+
+    @Test
+    void commandsThatNeedATargetSaySo() {
+        assertThat(run("apply")).isEqualTo(Main.ERROR);
+        assertThat(err.toString()).contains("--target is required");
+    }
+
+    @Test
     void invalidConfigStopsPlanBeforeAnyRequest() throws Exception {
         Files.writeString(root.resolve("dev/users/bad.json"), "{\"username\": \"Bad\"}");
 

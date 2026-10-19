@@ -25,13 +25,13 @@ public final class Main {
     static final int ERROR = 1;
     static final int DRIFT = 2;
 
-    private static final Set<String> FLAGS = Set.of("--fail-on-drift");
+    private static final Set<String> FLAGS = Set.of("--fail-on-drift", "--allow-delete-all");
     private static final String USAGE = """
             Usage: gitops <command> [options]
               validate [--target NAME]                      validate config against the schemas
               plan --target NAME [--fail-on-drift]          show what apply would change
                    [--format text|markdown] [--out FILE]
-              apply --target NAME                           make the live system match Git
+              apply --target NAME [--allow-delete-all]      make the live system match Git
               snapshot --target NAME                        write live state into Git
               fetch --target NAME                           print live state
               promote --from NAME --to NAME                 copy desired state between environments
@@ -60,7 +60,7 @@ public final class Main {
             return switch (args[0]) {
                 case "validate" -> validate(configRoot, options.get("--target"));
                 case "plan" -> plan(load(configRoot, options, "--target"), options);
-                case "apply" -> apply(load(configRoot, options, "--target"));
+                case "apply" -> apply(load(configRoot, options, "--target"), options.containsKey("--allow-delete-all"));
                 case "snapshot" -> snapshot(load(configRoot, options, "--target"));
                 case "fetch" -> fetch(load(configRoot, options, "--target"));
                 case "promote" -> promote(load(configRoot, options, "--from"), load(configRoot, options, "--to"));
@@ -99,12 +99,17 @@ public final class Main {
         return plan.hasChanges() && options.containsKey("--fail-on-drift") ? DRIFT : OK;
     }
 
-    private int apply(Target target) {
+    private int apply(Target target, boolean allowDeleteAll) {
         requireValid(target);
         Plan plan = Planner.plan(target);
         out.print(PlanRenderer.text(plan));
         if (!plan.hasChanges()) {
             return OK;
+        }
+        if (plan.count(Plan.Action.DELETE) > 0 && plan.count(Plan.Action.DELETE) == plan.changes().size()
+                && target.store().files().isEmpty() && !allowDeleteAll) {
+            throw new IllegalArgumentException("Refusing to delete every " + target.kind().id() + " in '" + target.name()
+                    + "' because Git has none. If that's really what you want, pass --allow-delete-all.");
         }
         Applier.apply(plan, target.provider(), out);
         if (!target.verifyAfterApply()) {

@@ -20,11 +20,11 @@ GitOps is a small infrastructure-as-code tool written in Java with Gradle and RE
 
 - **Git is the only way in.** Every change is a file edited in a pull request, reviewed and merged, so the history of the repository is the history of the system: who changed what, when and why. Rolling back is a `git revert`.
 - **You see the change before it happens.** A plan lists every resource that will be created, updated or deleted and every field that changes, not just the first difference. On a pull request it's posted as a comment, so reviewers approve the effect, not just the diff.
-- **Bad config never reaches a live system.** Every file is checked against a JSON Schema, its file name must match its key, and ids must be unique. All problems are reported at once, and plan and apply refuse to run until they're fixed.
+- **Bad config never reaches a live system.** Every file is checked against a JSON Schema, its file name must match its key, and ids must be unique. All problems are reported at once, and plan and apply refuse to run until they're fixed. A missing config folder is an error, and apply refuses to delete every live resource because Git has none unless you pass `--allow-delete-all`.
 - **Apply checks its own work.** After applying, it plans again and fails if anything still differs, so a change that the API quietly ignored doesn't look like a success.
 - **Drift gets noticed.** Once a day the live systems are compared with Git. If someone changed one by hand, an issue labelled `drift` opens with the plan, and it closes itself once they match again.
 - **Prod changes are tested first.** `dev` runs against a local mock API that CI builds from scratch on every pull request, applies and verifies. The promotion workflow copies `dev` to `prod` as a pull request of its own.
-- **It only touches what it manages.** Only fields declared in the schema are compared, so a user's address or a label's URL is ignored. With `prune` off, live resources that aren't in Git are listed and left alone. Caveat: JSONPlaceholder, the `prod` users API, accepts writes but never stores them, so applying to `prod` can't be verified, and the drift check there keeps reporting any difference between Git and JSONPlaceholder's fixed data.
+- **It only touches what it manages.** Only fields declared in the schema are compared, so a user's address or a label's URL is ignored. With `prune` off, live resources that aren't in Git are listed and left alone. Caveat: JSONPlaceholder, the `prod` users API, accepts writes but never stores them. Git matches its data today, but after any change to `config/prod/users` the apply can't be verified and the daily drift check keeps reporting that change, because JSONPlaceholder never keeps it. Pointing `prod` at an API that stores data fixes this.
 
 ## How to use it
 
@@ -54,10 +54,10 @@ GitOps is a small infrastructure-as-code tool written in Java with Gradle and RE
 <details>
 <summary><strong>Plans in one minute</strong></summary>
 
-- **Resources are matched by key:** `username` for users, `name` for labels. Changing a key is a delete of the old resource and a create of the new one.
+- **Resources are matched by key:** `username` for users, `name` for labels. Changing a username is a delete of the old user and a create of the new one. Label names match regardless of case, as on GitHub, so changing only the case renames the label.
 - **Actions:** `+ create` (in Git, not live), `~ update` (both, with the fields that differ) and `- delete` (live, not in Git, only when `prune` is on). With `prune` off, extra live resources are listed as unmanaged.
-- **Order:** deletes run first, then updates, then creates, so a freed key or id can be reused in the same apply.
-- **Users:** an update patches only the changed fields. A changed `id` can't be patched, so the user is deleted and created again under the new id.
+- **Order:** every delete runs first, then updates, then creates, so a freed key or id can be reused in the same apply, even when two users swap ids.
+- **Users:** an update patches only the changed fields. A changed `id` can't be patched, so the user is replaced: deleted with the other deletes and created again with the other creates.
 - **Exit codes:** 0 for success, 1 for an error or invalid config, 2 when `--fail-on-drift` finds drift.
 
 </details>
@@ -99,7 +99,7 @@ The default branch is `develop`. On Windows use `.\gradlew.bat` instead of `./gr
 | `./gradlew fetch -Ptarget=<t>` | Prints the live state as JSON |
 | `./gradlew promote -Pfrom=dev -Pto=prod` | Copies desired state from one environment to another |
 
-Without `-Ptarget`, the tasks use `prod`.
+`-Ptarget` has no default, so forgetting it stops with an error instead of quietly changing `prod`.
 
 ## How it works
 
@@ -183,7 +183,7 @@ Each folder under `config/` with a `target.json` is a target. Its resources are 
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `GITOPS_BASE_URL` | the target's `baseUrl` | Points a users target at another API without editing the file |
+| `GITOPS_<TARGET>_BASE_URL` | the target's `baseUrl` | Points one users target at another API without editing the file, for example `GITOPS_DEV_BASE_URL`. It's per target, so an override for `dev` can never move `prod`. |
 | `GITHUB_TOKEN` | unset | Sent to the GitHub API. Reading labels on a public repository works without it; changing them needs it. |
 | `GITHUB_API_URL` | `https://api.github.com` | For GitHub Enterprise Server |
 

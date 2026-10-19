@@ -27,6 +27,14 @@ class PlanRendererTest {
     }
 
     @Test
+    void escapesPipesInResourceNames() {
+        Plan labels = Planner.plan("github", "labels", Kind.LABELS, false,
+                List.of(TestData.label("p1 | urgent", "ff0000")), List.of());
+
+        assertThat(PlanRenderer.markdown(labels)).contains("`p1 \\| urgent`");
+    }
+
+    @Test
     void saysSoWhenThereIsNothingToDo() {
         Plan empty = Planner.plan("prod", "users", Kind.USERS, true, List.of(), List.of());
 

@@ -11,6 +11,7 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Stream;
 
 /**
@@ -68,7 +69,7 @@ public record Target(String name, Path dir, Kind kind, boolean prune, boolean ve
     /** Where the target points, after applying environment-variable overrides. */
     public String endpoint() {
         return switch (kind) {
-            case USERS -> envOr("GITOPS_BASE_URL", setting("baseUrl"));
+            case USERS -> envOr(baseUrlVariable(), setting("baseUrl"));
             case LABELS -> setting("repository");
         };
     }
@@ -83,6 +84,11 @@ public record Target(String name, Path dir, Kind kind, boolean prune, boolean ve
 
     public String describe() {
         return kind.id() + " @ " + endpoint();
+    }
+
+    /** GITOPS_&lt;TARGET&gt;_BASE_URL, so an override for one environment can never point another one elsewhere. */
+    public String baseUrlVariable() {
+        return "GITOPS_" + name.toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9]", "_") + "_BASE_URL";
     }
 
     private static String envOr(String variable, String fallback) {

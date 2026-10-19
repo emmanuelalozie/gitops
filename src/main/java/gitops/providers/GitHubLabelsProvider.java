@@ -56,7 +56,8 @@ public final class GitHubLabelsProvider implements Provider {
     @Override
     public void update(ObjectNode live, ObjectNode desired, List<FieldDiff> diffs) {
         ObjectNode patch = desired.objectNode();
-        diffs.forEach(d -> patch.set(d.field(), d.desired()));
+        // Label names match case-insensitively, so a name diff is a change of case, which GitHub calls new_name.
+        diffs.forEach(d -> patch.set(d.field().equals("name") ? "new_name" : d.field(), d.desired()));
         http.send(Method.PATCH, "/repos/{owner}/{repo}/labels/{name}", patch, owner, repo, live.path("name").asText());
     }
 
