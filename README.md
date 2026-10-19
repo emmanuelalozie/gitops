@@ -10,7 +10,7 @@ GitOps is a small infrastructure-as-code tool written in Java with Gradle and RE
 
 [How to use it](#how-to-use-it) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Configuration](#configuration) · [Workflows](#workflows) · [Extending it](#extending-it)
 
-[![CI](https://github.com/emmanuelalozie/gitops/actions/workflows/ci.yml/badge.svg)](https://github.com/emmanuelalozie/gitops/actions/workflows/ci.yml) ![Java](https://img.shields.io/badge/Java-21-f59e0b) ![Gradle](https://img.shields.io/badge/Gradle-8.14-02303a) ![HTTP](https://img.shields.io/badge/HTTP-RESTAssured%205.5-6db33f) ![Source of truth](https://img.shields.io/badge/source%20of%20truth-Git-2563eb)
+[![CI](https://github.com/emmanuelalozie/gitops/actions/workflows/ci.yml/badge.svg)](https://github.com/emmanuelalozie/gitops/actions/workflows/ci.yml) ![Java](https://img.shields.io/badge/Java-21-f59e0b) ![Gradle](https://img.shields.io/badge/Gradle-9.8-02303a) ![HTTP](https://img.shields.io/badge/HTTP-RESTAssured%206.1-6db33f) ![Source of truth](https://img.shields.io/badge/source%20of%20truth-Git-2563eb)
 
 <img src=".github/assets/plan-apply.png" alt="The plan for the dev target, users at http://localhost:3000: a Changes table with four updates (Bret's id from 15 back to 1, Elwyn.Skiles's id from 72 back to 7, Karianne's email from koryjoan.org back to kory.org and Maxime_Nienow's phone from x1400 back to x140), one create (Moriah.Stanton) and one delete (Moriah.Stantonite), the changes that undo hand edits made to the mock, and below it a terminal running ./gradlew applyConfig -Ptarget=dev, which prints the same plan, applies the six changes and reports Applied and verified: live state matches Git, followed by ./gradlew detectDrift -Ptarget=dev reporting No changes." />
 
@@ -82,7 +82,7 @@ The default branch is `develop`. On Windows use `.\gradlew.bat` instead of `./gr
 <details>
 <summary><strong>Development tools</strong></summary>
 
-- **Tests** use JUnit 5, AssertJ and [WireMock](https://wiremock.org) for the APIs, so they never call a live system. The report is in `build/reports/tests/test/index.html`.
+- **Tests** use JUnit 6, AssertJ and [WireMock](https://wiremock.org) for the APIs, so they never call a live system. The report is in `build/reports/tests/test/index.html`.
 - **Extra CLI flags** go through `-Pargs`, for example `./gradlew plan -Ptarget=prod -Pargs="--format markdown --out plan.md"` for the Markdown the pull request comment uses.
 - **Running the CLI directly:** `gitops.Main` takes `validate`, `plan`, `apply`, `snapshot`, `fetch` and `promote`, plus `--config-dir` to point at another folder. `help` lists the options.
 
@@ -119,12 +119,12 @@ flowchart LR
 | Part | Built with |
 | --- | --- |
 | **Language** | Java 21, through a Gradle toolchain |
-| **Build** | [Gradle 8.14](https://gradle.org) wrapper, with one `JavaExec` task per command |
-| **HTTP** | [RESTAssured 5.5](https://rest-assured.io) |
+| **Build** | [Gradle 9.8](https://gradle.org) wrapper, with one `JavaExec` task per command |
+| **HTTP** | [RESTAssured 6.1](https://rest-assured.io) |
 | **JSON and validation** | [Jackson](https://github.com/FasterXML/jackson) and [json-schema-validator](https://github.com/networknt/json-schema-validator) (JSON Schema 2020-12) |
 | **Mock API** | [json-server](https://github.com/typicode/json-server) 0.17.4, with Docker Compose |
 | **Automation** | GitHub Actions |
-| **Tests** | JUnit 5, AssertJ and WireMock |
+| **Tests** | JUnit 6, AssertJ and WireMock |
 
 Git holds the desired state, and the engine never trusts anything else: every command loads `config/<target>/`, validates it, asks the live system for its current state, and compares the two. Only a `Provider` talks to a live system, and only through four calls (list, create, update, delete), so the planning, rendering and checking are the same for every kind of resource.
 

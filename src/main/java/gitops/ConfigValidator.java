@@ -1,10 +1,11 @@
 package gitops;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.networknt.schema.JsonSchema;
-import com.networknt.schema.JsonSchemaFactory;
-import com.networknt.schema.SpecVersion;
-import com.networknt.schema.ValidationMessage;
+import com.networknt.schema.Error;
+import com.networknt.schema.InputFormat;
+import com.networknt.schema.Schema;
+import com.networknt.schema.SchemaRegistry;
+import com.networknt.schema.SpecificationVersion;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -16,7 +17,7 @@ import java.util.Map;
 /** Checks a target's files before anything is planned or applied. Returns every problem, not just the first. */
 public final class ConfigValidator {
 
-    private static final JsonSchemaFactory FACTORY = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
+    private static final SchemaRegistry REGISTRY = SchemaRegistry.withDefaultDialect(SpecificationVersion.DRAFT_2020_12);
 
     private ConfigValidator() {
     }
@@ -34,7 +35,8 @@ public final class ConfigValidator {
         }
 
         Kind kind = target.kind();
-        JsonSchema schema = FACTORY.getSchema(kind.schema());
+        // The validator is built on Jackson 3 and this project on Jackson 2, so they exchange JSON as text.
+        Schema schema = REGISTRY.getSchema(Json.compact(kind.schema()), InputFormat.JSON);
         Map<String, Map<String, Path>> seen = new HashMap<>();
 
         for (Path file : target.store().files()) {
@@ -45,8 +47,9 @@ public final class ConfigValidator {
                 errors.add(e.getMessage());
                 continue;
             }
-            for (ValidationMessage message : schema.validate(resource)) {
-                errors.add(file + ": " + message.getMessage());
+            for (Error error : schema.validate(Json.compact(resource), InputFormat.JSON)) {
+                String location = error.getInstanceLocation().toString();
+                errors.add(file + ": " + (location.isEmpty() ? "" : location + ": ") + error.getMessage());
             }
             JsonNode key = resource.get(kind.keyField());
             if (key == null || !key.isTextual()) {
