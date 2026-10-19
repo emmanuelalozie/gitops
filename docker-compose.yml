@@ -1,0 +1,10 @@
+# Local users API for the `dev` target: docker compose up, then ./gradlew plan -Ptarget=dev
+# The seed in mock/db.json is copied first, so applying never edits the committed file.
+services:
+  users-api:
+    image: node:20-alpine
+    command: sh -c "cp /seed/db.json /tmp/db.json && npx --yes json-server@0.17.4 --host 0.0.0.0 --port 3000 /tmp/db.json"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./mock:/seed:ro

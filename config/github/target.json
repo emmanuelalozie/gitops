@@ -1,0 +1,7 @@
+{
+  "description": "Issue labels of this repository. Labels not listed here are left alone.",
+  "kind": "labels",
+  "repository": "emmanuelalozie/gitops",
+  "prune": false,
+  "verifyAfterApply": true
+}

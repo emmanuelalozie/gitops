@@ -1,0 +1,40 @@
+name: Apply
+
+# Git is the source of truth: once a config change is merged, make the live systems match it.
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'config/prod/**'
+      - 'config/github/**'
+  workflow_dispatch:
+
+concurrency:
+  group: apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: Apply ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    # Add required reviewers to this environment in Settings > Environments to gate applies.
+    environment: production
+    permissions:
+      contents: read
+      issues: write # labels are managed through the issues API
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        target: [prod, github]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Apply
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./gradlew applyConfig -Ptarget=${{ matrix.target }}

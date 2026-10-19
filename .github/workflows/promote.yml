@@ -1,0 +1,39 @@
+name: Promote dev to prod
+
+# Copies config/dev/users to config/prod/users and opens a pull request, so prod only changes
+# through review. Needs "Allow GitHub Actions to create and approve pull requests" enabled in
+# Settings > Actions > General.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Promote
+        run: ./gradlew promote -Pfrom=dev -Pto=prod
+      - name: Open a pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          # Pull requests opened with the default GITHUB_TOKEN don't trigger other workflows.
+          # Set a PROMOTE_TOKEN secret (fine-grained PAT or app token) to get CI and Plan on them.
+          token: ${{ secrets.PROMOTE_TOKEN || secrets.GITHUB_TOKEN }}
+          branch: promote/dev-to-prod
+          delete-branch: true
+          commit-message: Promote dev config to prod
+          title: Promote dev config to prod
+          labels: promotion, config-change
+          body: |
+            Copies `config/dev/users` to `config/prod/users`, started by @${{ github.actor }}.
+
+            The Plan workflow comments with exactly what will change in prod. Merging runs the Apply workflow.

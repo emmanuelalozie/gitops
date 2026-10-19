@@ -1,0 +1,47 @@
+name: Plan
+
+# Comments on the pull request with what the Apply workflow would change once it merges.
+on:
+  pull_request:
+    paths:
+      - 'config/**'
+      - 'src/**'
+      - 'build.gradle'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Plan prod and github
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./gradlew -q plan -Ptarget=prod -Pargs="--format markdown --out plan-prod.md"
+          ./gradlew -q plan -Ptarget=github -Pargs="--format markdown --out plan-github.md"
+          {
+            echo "## GitOps plan"
+            echo
+            echo "What the Apply workflow will change when this pull request is merged."
+            echo
+            cat plan-prod.md
+            echo
+            cat plan-github.md
+          } > plan.md
+          cat plan.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Comment on the pull request
+        # Pull requests from forks get a read-only token, so they only get the job summary.
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: gitops-plan
+          path: plan.md

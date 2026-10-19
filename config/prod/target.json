@@ -1,0 +1,7 @@
+{
+  "description": "Production users API. JSONPlaceholder accepts writes but never persists them, so apply is not verified here.",
+  "kind": "users",
+  "baseUrl": "https://jsonplaceholder.typicode.com",
+  "prune": true,
+  "verifyAfterApply": false
+}
