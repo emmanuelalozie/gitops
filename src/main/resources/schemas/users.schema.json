@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/emmanuelalozie/gitops/schemas/users.schema.json",
+  "title": "User",
+  "description": "A user managed in a JSONPlaceholder-style users API. One file per user in config/<target>/users/.",
+  "type": "object",
+  "properties": {
+    "id": { "type": "integer", "minimum": 1 },
+    "username": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" },
+    "email": { "type": "string", "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$" },
+    "phone": { "type": "string", "minLength": 1 }
+  },
+  "required": ["id", "username", "email", "phone"],
+  "additionalProperties": false
+}

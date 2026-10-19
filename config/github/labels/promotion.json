@@ -1,0 +1,5 @@
+{
+  "name": "promotion",
+  "color": "0e8a16",
+  "description": "Promotes desired state from dev to prod"
+}

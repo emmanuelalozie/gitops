@@ -1,8 +1,11 @@
-# Ignore .grade directory
-.grade/
-
-# Ignore .vscode directory
-.vscode/
-
-# Ignore build directory
+# Gradle
+.gradle/
 build/
+
+# Editors
+.vscode/
+.idea/
+*.iml
+
+# Plan output from CI or local runs
+plan*.md

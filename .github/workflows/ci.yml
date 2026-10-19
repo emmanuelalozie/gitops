@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build, test, validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build and run unit tests
+        run: ./gradlew build
+      - name: Validate config against the schemas
+        run: ./gradlew validateConfig
+
+  integration:
+    # Proves the whole loop on a throwaway users API: apply the dev config, then require zero drift.
+    name: Apply and verify (dev mock)
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Start the mock users API
+        run: |
+          cp mock/db.json "$RUNNER_TEMP/db.json"
+          nohup npx --yes json-server@0.17.4 --port 3000 "$RUNNER_TEMP/db.json" > "$RUNNER_TEMP/mock.log" 2>&1 &
+          for _ in $(seq 60); do
+            curl -sf http://localhost:3000/users > /dev/null && exit 0
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/mock.log"
+          exit 1
+      - name: Plan
+        run: ./gradlew plan -Ptarget=dev
+      - name: Apply
+        run: ./gradlew applyConfig -Ptarget=dev
+      - name: Fail if any drift remains
+        run: ./gradlew detectDrift -Ptarget=dev

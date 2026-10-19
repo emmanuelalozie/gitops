@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/emmanuelalozie/gitops/schemas/labels.schema.json",
+  "title": "Label",
+  "description": "A GitHub issue label. One file per label in config/<target>/labels/.",
+  "type": "object",
+  "properties": {
+    "name": { "type": "string", "minLength": 1, "maxLength": 50 },
+    "color": { "type": "string", "pattern": "^[0-9a-f]{6}$" },
+    "description": { "type": "string", "maxLength": 100 }
+  },
+  "required": ["name", "color"],
+  "additionalProperties": false
+}

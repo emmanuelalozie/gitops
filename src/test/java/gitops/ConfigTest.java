@@ -1,0 +1,94 @@
+package gitops;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+
+import static gitops.TestData.user;
+import static org.assertj.core.api.Assertions.assertThat;
+
+class ConfigTest {
+
+    @TempDir
+    Path root;
+
+    private Target usersTarget() throws Exception {
+        Files.createDirectories(root.resolve("dev/users"));
+        Files.writeString(root.resolve("dev/target.json"), """
+                {"kind": "users", "baseUrl": "http://localhost:3000", "prune": true}""");
+        return Target.load(root, "dev");
+    }
+
+    @Test
+    void committedConfigIsValid() {
+        for (Target target : Target.loadAll(Path.of("config"))) {
+            assertThat(ConfigValidator.validate(target)).as(target.name()).isEmpty();
+        }
+    }
+
+    @Test
+    void fileNamesAreDerivedFromTheKey() {
+        assertThat(ConfigStore.fileName("Leopoldo_Corkery")).isEqualTo("leopoldo_corkery.json");
+        assertThat(ConfigStore.fileName("Elwyn.Skiles")).isEqualTo("elwyn.skiles.json");
+        assertThat(ConfigStore.fileName("good first issue")).isEqualTo("good-first-issue.json");
+    }
+
+    @Test
+    void replaceAllKeepsOnlySchemaFieldsAndRemovesStaleFiles() throws Exception {
+        Target target = usersTarget();
+        Files.writeString(target.resourceDir().resolve("old.json"), "{}");
+        var live = user(1, "Bret", "a@b.io");
+        live.put("website", "hildegard.org");
+
+        target.store().replaceAll(List.of(live));
+
+        assertThat(target.store().files()).extracting(p -> p.getFileName().toString()).containsExactly("bret.json");
+        assertThat(target.store().load()).containsExactly(user(1, "Bret", "a@b.io"));
+    }
+
+    @Test
+    void validatorReportsSchemaNamingAndUniquenessProblems() throws Exception {
+        Target target = usersTarget();
+        Path dir = target.resourceDir();
+        Json.write(dir.resolve("bret.json"), user(1, "Bret", "a@b.io"));
+        Json.write(dir.resolve("wrong-name.json"), user(1, "Antonette", "c@d.io"));
+        Files.writeString(dir.resolve("samantha.json"), """
+                {"id": "three", "username": "Samantha", "email": "not-an-email", "phone": "1", "extra": true}""");
+        Files.writeString(dir.resolve("broken.json"), "{ not json");
+
+        List<String> errors = ConfigValidator.validate(target);
+
+        assertThat(errors).anyMatch(e -> e.contains("wrong-name.json: file name must be antonette.json"));
+        assertThat(errors).anyMatch(e -> e.contains("id 1 is already used by"));
+        assertThat(errors).anyMatch(e -> e.contains("samantha.json") && e.contains("integer"));
+        assertThat(errors).anyMatch(e -> e.contains("samantha.json") && e.contains("email"));
+        assertThat(errors).anyMatch(e -> e.contains("samantha.json") && e.contains("extra"));
+        assertThat(errors).anyMatch(e -> e.contains("broken.json is not valid JSON"));
+    }
+
+    @Test
+    void validatorRequiresTheEndpointSetting() throws Exception {
+        Files.createDirectories(root.resolve("x"));
+        Files.writeString(root.resolve("x/target.json"), "{\"kind\": \"labels\"}");
+
+        assertThat(ConfigValidator.validate(Target.load(root, "x")))
+                .anyMatch(e -> e.contains("must set \"repository\""));
+    }
+
+    @Test
+    void promoteCopiesDesiredStateBetweenEnvironments() throws Exception {
+        Target dev = usersTarget();
+        Json.write(dev.resourceDir().resolve("bret.json"), user(1, "Bret", "a@b.io"));
+        Files.createDirectories(root.resolve("prod/users"));
+        Files.writeString(root.resolve("prod/target.json"), "{\"kind\": \"users\", \"baseUrl\": \"https://example.test\"}");
+        Json.write(root.resolve("prod/users/gone.json"), user(9, "Gone", "g@b.io"));
+        Target prod = Target.load(root, "prod");
+
+        Promoter.promote(dev, prod, System.out);
+
+        assertThat(prod.store().load()).containsExactly(user(1, "Bret", "a@b.io"));
+    }
+}
