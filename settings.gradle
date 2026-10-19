@@ -1,1 +1,6 @@
+plugins {
+    // If the machine has Java 17-20 but not 21, Gradle downloads a JDK 21 for this build by itself.
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
 rootProject.name = 'gitops'

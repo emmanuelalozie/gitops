@@ -63,20 +63,25 @@ GitOps is a small infrastructure-as-code tool written in Java with Gradle and RE
 
 ## Quick start
 
-You need [JDK 21](https://adoptium.net). The Gradle wrapper downloads Gradle itself. For the `dev` mock API you also need [Docker](https://docs.docker.com/get-docker/), or [Node.js](https://nodejs.org) LTS to run it without Docker.
+You need Java 17 or newer (Gradle downloads JDK 21 for the build if you don't have it) and, for the local demo, [Node.js](https://nodejs.org) or Docker. Gradle itself comes with the project. Not sure what's installed? Run the checker first:
 
 ```bash
 git clone https://github.com/emmanuelalozie/gitops
 cd gitops
-./gradlew build validateConfig           # compile, run the tests, check the config
-
-docker compose up -d                     # the dev users API, on http://localhost:3000
-./gradlew plan -Ptarget=dev              # what would change
-./gradlew applyConfig -Ptarget=dev       # make it match Git
-./gradlew detectDrift -Ptarget=dev       # passes: nothing left to change
+./scripts/doctor.sh          # Windows PowerShell: .\scripts\doctor.ps1
 ```
 
-The default branch is `develop`. On Windows use `.\gradlew.bat` instead of `./gradlew`. The mock starts out as a live system someone edited by hand (Bret and Elwyn.Skiles have the wrong ids, Karianne's email and Maxime_Nienow's phone were changed, and Moriah.Stanton was renamed), so the first plan shows six changes and the apply fixes them. Without Docker, start the mock with `cp mock/db.json /tmp/db.json && npx json-server@0.17.4 --port 3000 /tmp/db.json`; both ways copy the seed first, so applying never edits `mock/db.json`.
+It checks git, Java (and whether `JAVA_HOME` points at a different version than `java` on your PATH), Node.js and Docker, port 3000 and the download sites, and says exactly what to install, if anything.
+
+Then try the whole loop with one command:
+
+```bash
+./gradlew demo               # Windows: .\gradlew.bat demo
+```
+
+It starts the mock users API from `mock/db.json` (with Node.js, or Docker if Node isn't installed), plans, applies and runs a drift check against the `dev` target, then stops the mock. The mock starts out as a live system someone edited by hand (Bret and Elwyn.Skiles have the wrong ids, Karianne's email and Maxime_Nienow's phone were changed, and Moriah.Stanton was renamed), so the plan shows six changes, the apply fixes them, and the drift check passes. Edit a file in `config/dev/users` and run it again to see your own change planned and applied.
+
+The default branch is `develop`. To run the steps one at a time, start the mock yourself (`docker compose up -d`, or `cp mock/db.json /tmp/db.json && npx json-server@0.17.4 --port 3000 /tmp/db.json`) and use `./gradlew plan`, `applyConfig` and `detectDrift` with `-Ptarget=dev`. Both ways copy the seed first, so applying never edits `mock/db.json`.
 
 <details>
 <summary><strong>Development tools</strong></summary>
@@ -89,6 +94,8 @@ The default branch is `develop`. On Windows use `.\gradlew.bat` instead of `./gr
 
 | Command | What it does |
 | --- | --- |
+| `./scripts/doctor.sh`, `.\scripts\doctor.ps1` | Checks the machine for what the project needs |
+| `./gradlew demo` | The whole loop on a local mock: start it, plan, apply, drift check, stop it |
 | `./gradlew build` | Compiles and runs the tests: the gate for every change |
 | `./gradlew validateConfig` | Checks every target under `config/` against its schema |
 | `./gradlew plan -Ptarget=<t>` | Shows what apply would change |
@@ -129,6 +136,7 @@ Git holds the desired state, and the engine never trusts anything else: every co
 | Class | What it is |
 | --- | --- |
 | `Main.java` | The command line: parses options, runs a command, sets the exit code |
+| `Demo.java` | `./gradlew demo`: starts the mock with Node.js or Docker, runs plan, apply and a drift check, stops it |
 | `Target.java` | One managed system: `config/<name>/target.json`, its settings and its provider |
 | `Kind.java` | The kinds of resource: key field, unique fields and schema |
 | `ConfigStore.java` | Reads and writes one JSON file per resource |

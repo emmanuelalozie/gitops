@@ -38,6 +38,7 @@ tasks.named('test') {
 
 // ---------------------------------------------------------------------------
 // GitOps tasks. Pick the target with -Ptarget=<name> (a directory under config/).
+//   ./gradlew demo                           try the whole loop on a local mock (needs Node.js or Docker)
 //   ./gradlew validateConfig                 validate every target against its schema
 //   ./gradlew plan -Ptarget=prod             show what apply would change
 //   ./gradlew detectDrift -Ptarget=prod      like plan, but fails if there is drift
@@ -62,6 +63,14 @@ def gitopsTask(String name, String description, List<String> cliArgs) {
 // No default target: a forgotten -Ptarget must fail, not quietly change prod.
 def target = project.findProperty('target')
 def targetArgs = target ? ['--target', target.toString()] : []
+
+tasks.register('demo', JavaExec) {
+    group = 'gitops'
+    description = 'Starts the mock users API, runs plan, apply and a drift check against it, then stops it.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'gitops.Demo'
+    workingDir = rootDir
+}
 
 gitopsTask('validateConfig', 'Validates every target under config/ against its JSON Schema.', ['validate'])
 gitopsTask('plan', 'Shows the changes apply would make to the target.', ['plan'] + targetArgs)
