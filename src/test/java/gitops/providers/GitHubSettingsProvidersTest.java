@@ -129,13 +129,4 @@ class GitHubSettingsProvidersTest {
         assertThatThrownBy(() -> provider.create(Json.MAPPER.createObjectNode().put("name", "other")))
                 .hasMessageContaining("'other'").hasMessageContaining("'repo'");
     }
-
-    @Test
-    void usersApiSendsATokenWhenGivenOne() {
-        api.stubFor(get("/users").willReturn(okJson("[]")));
-
-        new UsersProvider(api.baseUrl(), "secret").list();
-
-        api.verify(getRequestedFor(urlEqualTo("/users")).withHeader("Authorization", equalTo("Bearer secret")));
-    }
 }

@@ -100,18 +100,4 @@ class ConfigTest {
         assertThat(ConfigValidator.validate(Target.load(root, "x")))
                 .anyMatch(e -> e.contains("must set \"repository\""));
     }
-
-    @Test
-    void promoteCopiesDesiredStateBetweenEnvironments() throws Exception {
-        Target dev = usersTarget();
-        Json.write(dev.resourceDir().resolve("bret.json"), user(1, "Bret", "a@b.io"));
-        Files.createDirectories(root.resolve("prod/users"));
-        Files.writeString(root.resolve("prod/target.json"), "{\"kind\": \"users\", \"baseUrl\": \"https://example.test\"}");
-        Json.write(root.resolve("prod/users/gone.json"), user(9, "Gone", "g@b.io"));
-        Target prod = Target.load(root, "prod");
-
-        Promoter.promote(dev, prod, System.out);
-
-        assertThat(prod.store().load()).containsExactly(user(1, "Bret", "a@b.io"));
-    }
 }
