@@ -12,7 +12,7 @@ GitOps is a small infrastructure-as-code tool written in Java with Gradle and RE
 
 [![CI](https://github.com/emmanuelalozie/gitops/actions/workflows/ci.yml/badge.svg)](https://github.com/emmanuelalozie/gitops/actions/workflows/ci.yml) ![Java](https://img.shields.io/badge/Java-21-f59e0b) ![Gradle](https://img.shields.io/badge/Gradle-8.14-02303a) ![HTTP](https://img.shields.io/badge/HTTP-RESTAssured%205.5-6db33f) ![Source of truth](https://img.shields.io/badge/source%20of%20truth-Git-2563eb)
 
-<img src=".github/assets/plan-apply.png" alt="The plan for the dev target, users at http://localhost:3000: a Changes table with two updates (Bret's id from 1 to 15 and Elwyn.Skiles's id from 7 to 72), one create (Moriah.Stantonite) and one delete (Moriah.Stanton), and below it a terminal running ./gradlew applyConfig -Ptarget=dev, which prints the same plan, applies the four changes and reports Applied and verified: live state matches Git, followed by ./gradlew detectDrift -Ptarget=dev reporting No changes." />
+<img src=".github/assets/plan-apply.png" alt="The plan for the dev target, users at http://localhost:3000: a Changes table with two updates (Bret's id from 15 back to 1 and Elwyn.Skiles's id from 72 back to 7), one create (Moriah.Stanton) and one delete (Moriah.Stantonite), the changes that undo hand edits made to the mock, and below it a terminal running ./gradlew applyConfig -Ptarget=dev, which prints the same plan, applies the four changes and reports Applied and verified: live state matches Git, followed by ./gradlew detectDrift -Ptarget=dev reporting No changes." />
 
 </div>
 
@@ -77,7 +77,7 @@ docker compose up -d                     # the dev users API, on http://localhos
 ./gradlew detectDrift -Ptarget=dev       # passes: nothing left to change
 ```
 
-The default branch is `develop`. On Windows use `.\gradlew.bat` instead of `./gradlew`. Without Docker, start the mock with `cp mock/db.json /tmp/db.json && npx json-server@0.17.4 --port 3000 /tmp/db.json`; both ways copy the seed first, so applying never edits `mock/db.json`.
+The default branch is `develop`. On Windows use `.\gradlew.bat` instead of `./gradlew`. The mock starts out as a live system someone edited by hand (Bret and Elwyn.Skiles have the wrong ids and Moriah.Stanton was renamed), so the first plan shows four changes and the apply fixes them. Without Docker, start the mock with `cp mock/db.json /tmp/db.json && npx json-server@0.17.4 --port 3000 /tmp/db.json`; both ways copy the seed first, so applying never edits `mock/db.json`.
 
 <details>
 <summary><strong>Development tools</strong></summary>
@@ -194,7 +194,7 @@ Each folder under `config/` with a `target.json` is a target. Its resources are 
 
 ```json
 {
-  "id": 15,
+  "id": 1,
   "username": "Bret",
   "email": "Sincere@april.biz",
   "phone": "1-770-736-8031 x56442"
