@@ -7,7 +7,6 @@ import gitops.Plan.Change;
 import gitops.Plan.FieldDiff;
 
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -55,9 +54,7 @@ public final class Planner {
     /** Only fields present in the desired resource are compared; extra live fields are ignored. */
     static List<FieldDiff> diff(ObjectNode desired, ObjectNode live) {
         List<FieldDiff> diffs = new ArrayList<>();
-        Iterator<Map.Entry<String, JsonNode>> fields = desired.fields();
-        while (fields.hasNext()) {
-            Map.Entry<String, JsonNode> field = fields.next();
+        for (Map.Entry<String, JsonNode> field : desired.properties()) {
             JsonNode current = live.get(field.getKey());
             if (current == null || !current.equals(field.getValue())) {
                 diffs.add(new FieldDiff(field.getKey(), current, field.getValue()));
