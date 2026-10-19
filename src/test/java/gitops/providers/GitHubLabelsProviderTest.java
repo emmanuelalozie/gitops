@@ -24,7 +24,7 @@ class GitHubLabelsProviderTest {
 
     @Test
     void followsPaginationAndSendsTheToken() {
-        String fullPage = IntStream.range(0, GitHubLabelsProvider.PAGE_SIZE)
+        String fullPage = IntStream.range(0, GitHubProvider.PAGE_SIZE)
                 .mapToObj(i -> "{\"name\": \"l" + i + "\", \"color\": \"ffffff\"}")
                 .reduce((a, b) -> a + "," + b).map(s -> "[" + s + "]").orElseThrow();
         api.stubFor(get(urlPathEqualTo("/repos/octo/repo/labels")).withQueryParam("page", equalTo("1"))
@@ -32,7 +32,7 @@ class GitHubLabelsProviderTest {
         api.stubFor(get(urlPathEqualTo("/repos/octo/repo/labels")).withQueryParam("page", equalTo("2"))
                 .willReturn(okJson("[{\"name\": \"last\", \"color\": \"000000\"}]")));
 
-        assertThat(provider("secret").list()).hasSize(GitHubLabelsProvider.PAGE_SIZE + 1);
+        assertThat(provider("secret").list()).hasSize(GitHubProvider.PAGE_SIZE + 1);
         api.verify(getRequestedFor(urlPathEqualTo("/repos/octo/repo/labels"))
                 .withHeader("Authorization", equalTo("Bearer secret"))
                 .withHeader("X-GitHub-Api-Version", equalTo("2022-11-28")));

@@ -18,10 +18,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [prod, github]
+        target: [prod, github, github-repo, github-branches]
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITOPS_ADMIN_TOKEN: ${{ secrets.GITOPS_ADMIN_TOKEN }}
       TITLE: Drift detected in ${{ matrix.target }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
@@ -34,9 +35,9 @@ jobs:
       - name: Plan
         id: plan
         run: |
-          ./gradlew -q plan -Ptarget=${{ matrix.target }} -Pargs="--format markdown --out plan.md"
+          ./gradlew -q plan -Ptarget=${{ matrix.target }} -Pargs="--format markdown --out plan.md --skip-without-token"
           cat plan.md >> "$GITHUB_STEP_SUMMARY"
-          if grep -q "No changes" plan.md; then echo "drift=false"; else echo "drift=true"; fi >> "$GITHUB_OUTPUT"
+          if grep -qE "No changes|Skipped" plan.md; then echo "drift=false"; else echo "drift=true"; fi >> "$GITHUB_OUTPUT"
       - name: Find the open drift issue
         id: issue
         run: |

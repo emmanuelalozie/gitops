@@ -25,13 +25,16 @@ public final class Main {
     static final int ERROR = 1;
     static final int DRIFT = 2;
 
-    private static final Set<String> FLAGS = Set.of("--fail-on-drift", "--allow-delete-all");
+    private static final Set<String> FLAGS = Set.of("--fail-on-drift", "--allow-delete-all", "--skip-without-token");
     private static final String USAGE = """
             Usage: gitops <command> [options]
+              version                                       print the version
               validate [--target NAME]                      validate config against the schemas
               plan --target NAME [--fail-on-drift]          show what apply would change
                    [--format text|markdown] [--out FILE]
               apply --target NAME [--allow-delete-all]      make the live system match Git
+            plan and apply also take --skip-without-token: succeed without doing anything when the
+            target requires a token (tokenRequired in target.json) and its variable isn't set
               snapshot --target NAME                        write live state into Git
               fetch --target NAME                           print live state
               promote --from NAME --to NAME                 copy desired state between environments
@@ -50,6 +53,11 @@ public final class Main {
     }
 
     int run(String[] args) {
+        if (args.length > 0 && (args[0].equals("--version") || args[0].equals("version"))) {
+            String version = Main.class.getPackage().getImplementationVersion();
+            out.println("gitops " + (version == null ? "(development build)" : version));
+            return OK;
+        }
         if (args.length == 0 || args[0].equals("--help") || args[0].equals("help")) {
             out.println(USAGE);
             return args.length == 0 ? ERROR : OK;
@@ -59,8 +67,10 @@ public final class Main {
             Path configRoot = Path.of(options.getOrDefault("--config-dir", "config"));
             return switch (args[0]) {
                 case "validate" -> validate(configRoot, options.get("--target"));
-                case "plan" -> plan(load(configRoot, options, "--target"), options);
-                case "apply" -> apply(load(configRoot, options, "--target"), options.containsKey("--allow-delete-all"));
+                case "plan" -> skipped(load(configRoot, options, "--target"), options) ? OK
+                        : plan(load(configRoot, options, "--target"), options);
+                case "apply" -> skipped(load(configRoot, options, "--target"), options) ? OK
+                        : apply(load(configRoot, options, "--target"), options.containsKey("--allow-delete-all"));
                 case "snapshot" -> snapshot(load(configRoot, options, "--target"));
                 case "fetch" -> fetch(load(configRoot, options, "--target"));
                 case "promote" -> promote(load(configRoot, options, "--from"), load(configRoot, options, "--to"));
@@ -86,6 +96,29 @@ public final class Main {
         }
         errors.forEach(e -> err.println("  " + e));
         return errors.isEmpty() ? OK : ERROR;
+    }
+
+    /**
+     * A target whose required token is missing can't be planned. With --skip-without-token that is
+     * reported and skipped, so CI without the secret still passes; without it, it's an error.
+     */
+    private boolean skipped(Target target, Map<String, String> options) {
+        if (!target.missingRequiredToken()) {
+            return false;
+        }
+        String reason = "'" + target.name() + "' needs a token in " + target.tokenVariable();
+        if (!options.containsKey("--skip-without-token")) {
+            throw new IllegalArgumentException(reason + ".");
+        }
+        String note = "Skipped " + reason + ", which isn't set.";
+        out.println(note);
+        if ("true".equals(System.getenv("GITHUB_ACTIONS"))) {
+            out.println("::notice::" + note);
+        }
+        if (options.containsKey("--out")) {
+            write(Path.of(options.get("--out")), "### Plan for `" + target.name() + "` (" + target.describe() + ")\n\n" + note + "\n");
+        }
+        return true;
     }
 
     private int plan(Target target, Map<String, String> options) {

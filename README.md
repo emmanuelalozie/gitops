@@ -6,9 +6,9 @@
 
 **Keep the desired state of your systems in Git, see every change as a plan before it happens, and find out when the live system drifts.**
 
-GitOps is a small infrastructure-as-code tool written in Java with Gradle and RESTAssured. The desired state of each system lives in JSON files under `config/`. The tool compares them with what is actually running, shows the difference as a plan, and applies it, and GitHub Actions runs it on every pull request, on every merge and once a day. Today it manages users in a JSONPlaceholder-style API (a stand-in for tenants, accounts or feature flags) and the issue labels of this repository.
+GitOps is a small infrastructure-as-code tool written in Java with Gradle and RESTAssured. The desired state of each system lives in JSON files under `config/`. The tool compares them with what is actually running, shows the difference as a plan, and applies it, and GitHub Actions runs it on every pull request, on every merge and once a day. Today it manages users in a JSONPlaceholder-style API (a stand-in for tenants, accounts or feature flags) and this repository's own GitHub setup: its issue labels, its settings and topics, and the protection rule on `develop`.
 
-[How to use it](#how-to-use-it) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Configuration](#configuration) · [Workflows](#workflows) · [Extending it](#extending-it)
+[How to use it](#how-to-use-it) · [Quick start](#quick-start) · [How it works](#how-it-works) · [Configuration](#configuration) · [Workflows](#workflows) · [Releases](#releases) · [Extending it](#extending-it)
 
 [![CI](https://github.com/emmanuelalozie/gitops/actions/workflows/ci.yml/badge.svg)](https://github.com/emmanuelalozie/gitops/actions/workflows/ci.yml) ![Java](https://img.shields.io/badge/Java-21-f59e0b) ![Gradle](https://img.shields.io/badge/Gradle-9.8-02303a) ![HTTP](https://img.shields.io/badge/HTTP-RESTAssured%206.1-6db33f) ![Source of truth](https://img.shields.io/badge/source%20of%20truth-Git-2563eb)
 
@@ -24,7 +24,7 @@ GitOps is a small infrastructure-as-code tool written in Java with Gradle and RE
 - **Apply checks its own work.** After applying, it plans again and fails if anything still differs, so a change that the API quietly ignored doesn't look like a success.
 - **Drift gets noticed.** Once a day the live systems are compared with Git. If someone changed one by hand, an issue labelled `drift` opens with the plan, and it closes itself once they match again.
 - **Prod changes are tested first.** `dev` runs against a local mock API that CI builds from scratch on every pull request, applies and verifies. The promotion workflow copies `dev` to `prod` as a pull request of its own.
-- **It only touches what it manages.** Only fields declared in the schema are compared, so a user's address or a label's URL is ignored. With `prune` off, live resources that aren't in Git are listed and left alone. Caveat: JSONPlaceholder, the `prod` users API, accepts writes but never stores them. Git matches its data today, but after any change to `config/prod/users` the apply can't be verified and the daily drift check keeps reporting that change, because JSONPlaceholder never keeps it. Pointing `prod` at an API that stores data fixes this.
+- **It only touches what it manages.** Only fields declared in the schema are compared, so a user's address or a label's URL is ignored. With `prune` off, live resources that aren't in Git are listed and left alone. Caveat: JSONPlaceholder, the `prod` users API, accepts writes but never stores them. Git matches its data today, but after any change to `config/prod/users` the apply can't be verified and the daily drift check keeps reporting that change, because JSONPlaceholder never keeps it. [A real API for prod](#a-real-api-for-prod) fixes this: `server/` is one that stores what you write, ready to deploy.
 
 ## How to use it
 
@@ -54,10 +54,11 @@ GitOps is a small infrastructure-as-code tool written in Java with Gradle and RE
 <details>
 <summary><strong>Plans in one minute</strong></summary>
 
-- **Resources are matched by key:** `username` for users, `name` for labels. Changing a username is a delete of the old user and a create of the new one. Label names match regardless of case, as on GitHub, so changing only the case renames the label.
+- **Resources are matched by key:** `username` for users, `name` for labels and repository settings, `branch` for protection rules. Changing a username is a delete of the old user and a create of the new one. Label names match regardless of case, as on GitHub, so changing only the case renames the label.
 - **Actions:** `+ create` (in Git, not live), `~ update` (both, with the fields that differ) and `- delete` (live, not in Git, only when `prune` is on). With `prune` off, extra live resources are listed as unmanaged.
 - **Order:** every delete runs first, then updates, then creates, so a freed key or id can be reused in the same apply, even when two users swap ids.
 - **Users:** an update patches only the changed fields. A changed `id` can't be patched, so the user is replaced: deleted with the other deletes and created again with the other creates.
+- **Lists** such as topics and required checks are compared as sets, because APIs return them in their own order.
 - **Exit codes:** 0 for success, 1 for an error or invalid config, 2 when `--fail-on-drift` finds drift.
 
 </details>
@@ -77,6 +78,8 @@ docker compose up -d                     # the dev users API, on http://localhos
 ./gradlew detectDrift -Ptarget=dev       # passes: nothing left to change
 ```
 
+Or skip the build: download `gitops-<version>-all.jar` from the [latest release](https://github.com/emmanuelalozie/gitops/releases/latest) and run `java -jar gitops-<version>-all.jar plan --target prod` from a checkout, since the config lives in the repository.
+
 The default branch is `develop`. On Windows use `.\gradlew.bat` instead of `./gradlew`. The mock starts out as a live system someone edited by hand (Bret and Elwyn.Skiles have the wrong ids, Karianne's email and Maxime_Nienow's phone were changed, and Moriah.Stanton was renamed), so the first plan shows six changes and the apply fixes them. Without Docker, start the mock with `cp mock/db.json /tmp/db.json && npx json-server@0.17.4 --port 3000 /tmp/db.json`; both ways copy the seed first, so applying never edits `mock/db.json`.
 
 <details>
@@ -84,7 +87,7 @@ The default branch is `develop`. On Windows use `.\gradlew.bat` instead of `./gr
 
 - **Tests** use JUnit 6, AssertJ and [WireMock](https://wiremock.org) for the APIs, so they never call a live system. The report is in `build/reports/tests/test/index.html`.
 - **Extra CLI flags** go through `-Pargs`, for example `./gradlew plan -Ptarget=prod -Pargs="--format markdown --out plan.md"` for the Markdown the pull request comment uses.
-- **Running the CLI directly:** `gitops.Main` takes `validate`, `plan`, `apply`, `snapshot`, `fetch` and `promote`, plus `--config-dir` to point at another folder. `help` lists the options.
+- **Running the CLI directly:** `gitops.Main` (or the release jar) takes `validate`, `plan`, `apply`, `snapshot`, `fetch`, `promote` and `version`, plus `--config-dir` to point at another folder. `help` lists the options.
 
 </details>
 
@@ -98,6 +101,7 @@ The default branch is `develop`. On Windows use `.\gradlew.bat` instead of `./gr
 | `./gradlew snapshot -Ptarget=<t>` | Writes the live state into `config/<t>/` |
 | `./gradlew fetch -Ptarget=<t>` | Prints the live state as JSON |
 | `./gradlew promote -Pfrom=dev -Pto=prod` | Copies desired state from one environment to another |
+| `./gradlew cliJar` | Builds the runnable jar in `build/libs/` |
 
 `-Ptarget` has no default, so forgetting it stops with an error instead of quietly changing `prod`.
 
@@ -109,7 +113,7 @@ flowchart LR
     pr -- CI --> checks[Build, tests,<br>schema validation,<br>apply + verify on dev mock]
     pr -- Plan workflow --> comment[Plan posted<br>as a PR comment]
     pr -- review + merge --> main[(develop)]
-    main -- Apply workflow --> live[Live systems:<br>prod users API,<br>GitHub labels]
+    main -- Apply workflow --> live[Live systems:<br>prod users API,<br>GitHub labels, settings,<br>branch protection]
     cron[Daily schedule] -- Drift workflow --> check{Live matches Git?}
     live -.-> check
     check -- no --> issue[Issue labelled drift]
@@ -122,7 +126,7 @@ flowchart LR
 | **Build** | [Gradle 9.8](https://gradle.org) wrapper, with one `JavaExec` task per command |
 | **HTTP** | [RESTAssured 6.1](https://rest-assured.io) |
 | **JSON and validation** | [Jackson](https://github.com/FasterXML/jackson) and [json-schema-validator](https://github.com/networknt/json-schema-validator) (JSON Schema 2020-12) |
-| **Mock API** | [json-server](https://github.com/typicode/json-server) 0.17.4, with Docker Compose |
+| **Users APIs** | [json-server](https://github.com/typicode/json-server) 0.17.4: the mock in `mock/`, and the deployable server in `server/` |
 | **Automation** | GitHub Actions |
 | **Tests** | JUnit 6, AssertJ and WireMock |
 
@@ -141,9 +145,13 @@ Git holds the desired state, and the engine never trusts anything else: every co
 | `Promoter.java` | Copies desired state between environments |
 | `Json.java` | Shared Jackson setup, so files are always written the same way |
 | `providers/UsersProvider.java` | `GET`, `POST`, `PATCH` and `DELETE` on `/users` |
-| `providers/GitHubLabelsProvider.java` | The GitHub labels API, following pages and sending `GITHUB_TOKEN` |
+| `providers/GitHubProvider.java` | Shared setup for the GitHub providers: headers, token, paging |
+| `providers/GitHubLabelsProvider.java` | Issue labels |
+| `providers/GitHubRepositoryProvider.java` | Repository settings: `PATCH` for fields, a separate `PUT` for topics |
+| `providers/GitHubBranchProtectionProvider.java` | Branch protection, flattened from GitHub's nested shape into one checklist per branch |
 | `providers/Http.java`, `ApiException.java` | RESTAssured setup, and an error naming the request whenever a status isn't 2xx |
-| `src/main/resources/schemas/` | `users.schema.json` and `labels.schema.json` |
+| `src/main/resources/schemas/` | One schema per kind: users, labels, repository, branch-protection |
+| `server/` | The users API for a real prod: json-server, a persistent data file, and a token check on writes |
 
 All Java classes are under `src/main/java/gitops`.
 
@@ -158,7 +166,7 @@ All Java classes are under `src/main/java/gitops`.
 
 - **Pull requests:** CI (`.github/workflows/ci.yml`) runs `./gradlew build validateConfig` on JDK 21, then starts the mock, applies `dev` and fails if any drift remains.
 - **Reviews:** `CODEOWNERS` asks the owner to review every change, the pull request template asks for the plan to be read, and Dependabot proposes Gradle and Actions updates weekly.
-- **Releases:** none. The version is `0.1.0` in `build.gradle`.
+- **Releases:** tags `v1.2.3` build a runnable jar and publish it, see [Releases](#releases).
 
 </details>
 
@@ -171,20 +179,26 @@ Each folder under `config/` with a `target.json` is a target. Its resources are 
 | `dev` | users | The json-server mock in `mock/`, on `http://localhost:3000` | on | on |
 | `prod` | users | `https://jsonplaceholder.typicode.com` | on | off, because writes aren't stored |
 | `github` | labels | This repository, `emmanuelalozie/gitops` | off, so GitHub's default labels stay | on |
+| `github-repo` | repository | This repository's settings and topics | off (settings can't be deleted) | on |
+| `github-branches` | branch-protection | Protection rules on this repository's branches | off, so other rules stay | on |
 
 | Setting in `target.json` | Purpose |
 | --- | --- |
-| `kind` | `users` or `labels` |
+| `kind` | `users`, `labels`, `repository` or `branch-protection` |
 | `baseUrl` | Users only: the API's base URL |
-| `repository` | Labels only: `owner/name` |
+| `repository` | GitHub kinds: `owner/name` |
 | `prune` | Delete live resources that aren't in Git. Off: list them as unmanaged and leave them alone. |
 | `verifyAfterApply` | Plan again after applying and fail if anything still differs (on by default) |
+| `tokenEnv` | The environment variable holding the API token. Default: `GITHUB_TOKEN` for GitHub kinds, none for users. |
+| `tokenRequired` | Plan and apply need the token. With `--skip-without-token` (what the workflows pass) a target without it is skipped with a notice instead of failing. |
 | `description` | A note for people; the tool ignores it |
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `GITOPS_<TARGET>_BASE_URL` | the target's `baseUrl` | Points one users target at another API without editing the file, for example `GITOPS_DEV_BASE_URL`. It's per target, so an override for `dev` can never move `prod`. |
-| `GITHUB_TOKEN` | unset | Sent to the GitHub API. Reading labels on a public repository works without it; changing them needs it. |
+| `GITHUB_TOKEN` | unset | Sent to the GitHub API for labels. Reading them on a public repository works without it; changing them needs it. |
+| `GITOPS_ADMIN_TOKEN` | unset | For `github-repo` and `github-branches`: a token with admin rights on the repository, which the workflows' own token doesn't have. |
+| `GITOPS_PROD_USERS_TOKEN` | unset | Sent to the prod users API as a bearer token. JSONPlaceholder ignores it; `server/` requires it for writes. |
 | `GITHUB_API_URL` | `https://api.github.com` | For GitHub Enterprise Server |
 
 <details>
@@ -218,16 +232,34 @@ Each folder under `config/` with a `target.json` is a target. Its resources are 
 | Workflow | When | What it does |
 | --- | --- | --- |
 | `ci.yml` | Every pull request and push to `develop` | Build, tests and validation, then apply `dev` to a fresh mock and fail on remaining drift |
-| `plan.yml` | Pull requests that touch `config/`, `src/` or `build.gradle` | Plans `prod` and `github` and keeps one comment on the pull request up to date |
-| `apply.yml` | Pushes to `develop` that touch `config/prod/` or `config/github/`, or by hand | Applies `prod` and then `github`, in the `production` environment, one at a time |
+| `plan.yml` | Pull requests that touch `config/`, `src/` or `build.gradle` | Plans `prod`, `github`, `github-repo` and `github-branches` and keeps one comment on the pull request up to date |
+| `apply.yml` | Pushes to `develop` that touch the config of those targets, or by hand | Applies them in the `production` environment, one at a time |
 | `drift.yml` | Daily at 06:17 UTC, or by hand | Plans each target, opens or updates a `drift` issue when they differ, and closes it once they match |
 | `promote.yml` | By hand | Copies `config/dev/users` to `config/prod/users` and opens a pull request |
+| `release.yml` | A pushed `v1.2.3` tag, or by hand with a version | Builds, tests and publishes a GitHub release with the runnable jar and its SHA-256 |
 
-Some of the setup lives in GitHub's settings rather than in files:
+Branch protection on `develop` and the repository's settings are in Git (`config/github-branches/`, `config/github-repo/`). The rule on `develop` is set up for one maintainer: changes need a pull request with both CI checks passing, but no approvals, since GitHub doesn't let you approve your own pull request, and admins can still bypass it in an emergency.
 
-- **Branch protection on `develop`:** require pull requests, a review from code owners, and the *Build, test, validate* and *Apply and verify (dev mock)* checks.
-- **The `production` environment** (Settings > Environments): add required reviewers so applies wait for approval. Otherwise GitHub creates it with no protection on the first run.
-- **Promotion pull requests:** allow Actions to create pull requests (Settings > Actions > General). Pull requests opened with the default token don't start other workflows, so add a `PROMOTE_TOKEN` secret if you want CI and the plan comment on them.
+A few things still live in GitHub's settings, because changing them needs more than the tool can be given:
+
+- **Secrets** (Settings > Secrets and variables > Actions):
+  - `GITOPS_ADMIN_TOKEN`: a [fine-grained token](https://github.com/settings/personal-access-tokens/new) for this repository with *Administration: Read and write*. Without it, the settings and branch protection targets are skipped with a notice.
+  - `GITOPS_PROD_USERS_TOKEN`: only once prod runs on `server/`, the same value as its `API_TOKEN`.
+  - `PROMOTE_TOKEN` (optional): so promotion pull requests start CI and the plan comment.
+- **The `production` environment** (Settings > Environments): add yourself as a required reviewer so applies wait for approval.
+- **Promotion pull requests:** allow Actions to create pull requests (Settings > Actions > General).
+
+### A real API for prod
+
+JSONPlaceholder never stores writes, so applies to `prod` can't be verified. `server/` is a users API that keeps them: json-server with its data file on a volume, seeded with the same users as `config/prod/users`, open for reads and closed to writes without a bearer token.
+
+1. Deploy `server/` anywhere that runs a container with a persistent volume. `server/fly.toml` is ready for [Fly.io](https://fly.io): `fly launch --copy-config --no-deploy`, `fly volumes create gitops_users`, `fly secrets set API_TOKEN=<long random string>`, `fly deploy`.
+2. Save the same token as the `GITOPS_PROD_USERS_TOKEN` secret.
+3. In a pull request, set `baseUrl` in `config/prod/target.json` to the server's URL and `verifyAfterApply` to `true`. The plan comment shows the switch is safe: no changes, because the seed matches Git.
+
+## Releases
+
+Push a tag (`git tag v0.2.0 && git push origin v0.2.0`) or run the *Release* workflow with a version. It runs the build and tests, then publishes `gitops-<version>-all.jar`, which has every dependency inside, with its SHA-256 and generated notes. `java -jar gitops-<version>-all.jar version` prints the version.
 
 ## Extending it
 
@@ -236,7 +268,7 @@ To manage a new kind of resource:
 1. Add its schema as `src/main/resources/schemas/<kind>.schema.json`. Only the fields declared there are managed.
 2. Add it to `Kind` with its key field and any fields that must be unique.
 3. Implement `Provider` (list, create, update, delete) for its API and return it from `Target.provider()`.
-4. Add `config/<target>/target.json` and the resource files, write the files from the live system with `./gradlew snapshot -Ptarget=<target>` if it already has data, and add the target to the `apply.yml` and `drift.yml` matrices.
+4. Add `config/<target>/target.json` (with `tokenEnv` and `tokenRequired` if the API needs its own token) and the resource files, write the files from the live system with `./gradlew snapshot -Ptarget=<target>` if it already has data, and add the target to the `apply.yml` and `drift.yml` matrices.
 
 ## Credits and license
 

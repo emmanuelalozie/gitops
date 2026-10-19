@@ -2,7 +2,9 @@ package gitops;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import gitops.providers.GitHubBranchProtectionProvider;
 import gitops.providers.GitHubLabelsProvider;
+import gitops.providers.GitHubRepositoryProvider;
 import gitops.providers.Provider;
 import gitops.providers.UsersProvider;
 
@@ -70,15 +72,39 @@ public record Target(String name, Path dir, Kind kind, boolean prune, boolean ve
     public String endpoint() {
         return switch (kind) {
             case USERS -> envOr(baseUrlVariable(), setting("baseUrl"));
-            case LABELS -> setting("repository");
+            case LABELS, REPOSITORY, BRANCH_PROTECTION -> setting("repository");
         };
     }
 
+    /**
+     * The environment variable holding this target's API token: "tokenEnv" in target.json, otherwise
+     * GITHUB_TOKEN for GitHub targets and none for users APIs.
+     */
+    public String tokenVariable() {
+        String configured = settings.path("tokenEnv").asText("");
+        if (!configured.isBlank()) {
+            return configured;
+        }
+        return kind == Kind.USERS ? null : "GITHUB_TOKEN";
+    }
+
+    /** True when target.json sets "tokenRequired" and the token variable is empty. */
+    public boolean missingRequiredToken() {
+        return settings.path("tokenRequired").asBoolean(false) && token() == null;
+    }
+
+    private String token() {
+        String variable = tokenVariable();
+        return variable == null ? null : envOr(variable, null);
+    }
+
     public Provider provider() {
+        String github = envOr("GITHUB_API_URL", "https://api.github.com");
         return switch (kind) {
-            case USERS -> new UsersProvider(endpoint());
-            case LABELS -> new GitHubLabelsProvider(
-                    envOr("GITHUB_API_URL", "https://api.github.com"), endpoint(), System.getenv("GITHUB_TOKEN"));
+            case USERS -> new UsersProvider(endpoint(), token());
+            case LABELS -> new GitHubLabelsProvider(github, endpoint(), token());
+            case REPOSITORY -> new GitHubRepositoryProvider(github, endpoint(), token());
+            case BRANCH_PROTECTION -> new GitHubBranchProtectionProvider(github, endpoint(), token());
         };
     }
 

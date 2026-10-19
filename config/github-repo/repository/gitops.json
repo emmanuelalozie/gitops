@@ -1,0 +1,14 @@
+{
+  "name": "gitops",
+  "description": "Simple repository to act as single source of truth to deliver Infrastructure as Code (IaC)",
+  "homepage": "",
+  "topics": ["gitops", "infrastructure-as-code", "java", "gradle", "rest-assured", "github-actions", "drift-detection"],
+  "has_issues": true,
+  "has_projects": true,
+  "has_wiki": true,
+  "allow_squash_merge": true,
+  "allow_merge_commit": true,
+  "allow_rebase_merge": true,
+  "allow_auto_merge": false,
+  "delete_branch_on_merge": true
+}

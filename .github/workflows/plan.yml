@@ -22,21 +22,21 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v6
-      - name: Plan prod and github
+      - name: Plan every live target
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Optional: admin token for repository settings and branch protection (skipped without it).
+          GITOPS_ADMIN_TOKEN: ${{ secrets.GITOPS_ADMIN_TOKEN }}
         run: |
-          ./gradlew -q plan -Ptarget=prod -Pargs="--format markdown --out plan-prod.md"
-          ./gradlew -q plan -Ptarget=github -Pargs="--format markdown --out plan-github.md"
           {
             echo "## GitOps plan"
             echo
             echo "What the Apply workflow will change when this pull request is merged."
-            echo
-            cat plan-prod.md
-            echo
-            cat plan-github.md
           } > plan.md
+          for target in prod github github-repo github-branches; do
+            ./gradlew -q plan -Ptarget=$target -Pargs="--format markdown --out plan-$target.md --skip-without-token"
+            { echo; cat plan-$target.md; } >> plan.md
+          done
           cat plan.md >> "$GITHUB_STEP_SUMMARY"
       - name: Comment on the pull request
         # Pull requests from forks get a read-only token, so they only get the job summary.

@@ -9,3 +9,6 @@ build/
 
 # Plan output from CI or local runs
 plan*.md
+
+# Local installs of the users API server
+server/node_modules/
