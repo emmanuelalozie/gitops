@@ -70,6 +70,29 @@ class ConfigTest {
     }
 
     @Test
+    void replaceAllRefusesKeysThatShareAFileName() throws Exception {
+        Target target = usersTarget();
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> target.store().replaceAll(
+                        List.of(user(1, "Bret", "a@b.io"), user(2, "bret", "c@d.io"))))
+                .hasMessageContaining("bret.json");
+        assertThat(target.store().files()).isEmpty();
+    }
+
+    @Test
+    void validatorRequiresTheResourceFolder() throws Exception {
+        Files.createDirectories(root.resolve("empty"));
+        Files.writeString(root.resolve("empty/target.json"), "{\"kind\": \"users\", \"baseUrl\": \"http://x\"}");
+
+        assertThat(ConfigValidator.validate(Target.load(root, "empty"))).anyMatch(e -> e.contains("does not exist"));
+    }
+
+    @Test
+    void baseUrlOverrideIsPerTarget() throws Exception {
+        assertThat(usersTarget().baseUrlVariable()).isEqualTo("GITOPS_DEV_BASE_URL");
+    }
+
+    @Test
     void validatorRequiresTheEndpointSetting() throws Exception {
         Files.createDirectories(root.resolve("x"));
         Files.writeString(root.resolve("x/target.json"), "{\"kind\": \"labels\"}");

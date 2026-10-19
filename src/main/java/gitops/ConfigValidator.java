@@ -6,6 +6,7 @@ import com.networknt.schema.JsonSchemaFactory;
 import com.networknt.schema.SpecVersion;
 import com.networknt.schema.ValidationMessage;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -26,6 +27,10 @@ public final class ConfigValidator {
             target.endpoint();
         } catch (IllegalArgumentException e) {
             errors.add(e.getMessage());
+        }
+
+        if (!Files.isDirectory(target.resourceDir())) {
+            errors.add(target.resourceDir() + " does not exist. An empty target would delete everything live, so create the folder on purpose.");
         }
 
         Kind kind = target.kind();

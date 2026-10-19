@@ -60,13 +60,15 @@ def gitopsTask(String name, String description, List<String> cliArgs) {
     }
 }
 
-def target = project.findProperty('target') ?: 'prod'
+// No default target: a forgotten -Ptarget must fail, not quietly change prod.
+def target = project.findProperty('target')
+def targetArgs = target ? ['--target', target.toString()] : []
 
 gitopsTask('validateConfig', 'Validates every target under config/ against its JSON Schema.', ['validate'])
-gitopsTask('plan', 'Shows the changes apply would make to the target.', ['plan', '--target', target])
-gitopsTask('detectDrift', 'Fails if the live system has drifted from Git.', ['plan', '--target', target, '--fail-on-drift'])
-gitopsTask('applyConfig', 'Reconciles the live system to match Git.', ['apply', '--target', target])
-gitopsTask('snapshot', 'Writes the live state of the target into Git.', ['snapshot', '--target', target])
-gitopsTask('fetch', 'Prints the live state of the target.', ['fetch', '--target', target])
+gitopsTask('plan', 'Shows the changes apply would make to the target.', ['plan'] + targetArgs)
+gitopsTask('detectDrift', 'Fails if the live system has drifted from Git.', ['plan', '--fail-on-drift'] + targetArgs)
+gitopsTask('applyConfig', 'Reconciles the live system to match Git.', ['apply'] + targetArgs)
+gitopsTask('snapshot', 'Writes the live state of the target into Git.', ['snapshot'] + targetArgs)
+gitopsTask('fetch', 'Prints the live state of the target.', ['fetch'] + targetArgs)
 gitopsTask('promote', 'Copies desired state from one environment to another.',
         ['promote', '--from', project.findProperty('from') ?: 'dev', '--to', project.findProperty('to') ?: 'prod'])

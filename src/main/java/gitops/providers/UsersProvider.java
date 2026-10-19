@@ -29,14 +29,8 @@ public final class UsersProvider implements Provider {
         http.send(Method.POST, "/users", desired);
     }
 
-    /** A changed id cannot be patched in place, so the user is deleted and recreated under the new id. */
     @Override
     public void update(ObjectNode live, ObjectNode desired, List<FieldDiff> diffs) {
-        if (diffs.stream().anyMatch(d -> d.field().equals("id"))) {
-            delete(live);
-            create(desired);
-            return;
-        }
         ObjectNode patch = desired.objectNode();
         diffs.forEach(d -> patch.set(d.field(), d.desired()));
         http.send(Method.PATCH, "/users/{id}", patch, live.path("id").asText());
@@ -45,5 +39,11 @@ public final class UsersProvider implements Provider {
     @Override
     public void delete(ObjectNode live) {
         http.send(Method.DELETE, "/users/{id}", null, live.path("id").asText());
+    }
+
+    /** A changed id cannot be patched in place, so the user is deleted and recreated under the new id. */
+    @Override
+    public boolean requiresReplace(List<FieldDiff> diffs) {
+        return diffs.stream().anyMatch(d -> d.field().equals("id"));
     }
 }

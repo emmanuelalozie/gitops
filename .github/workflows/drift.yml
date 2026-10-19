@@ -50,7 +50,9 @@ jobs:
           if [ -n "${{ steps.issue.outputs.number }}" ]; then
             gh issue comment "${{ steps.issue.outputs.number }}" --body-file body.md
           else
-            gh label create drift --color d93f0b --description "Live state no longer matches Git" --force
+            # The drift label is managed in config/github/labels; only create it, from that file, if it's missing.
+            label=config/github/labels/drift.json
+            gh label create drift --color "$(jq -r .color "$label")" --description "$(jq -r .description "$label")" 2>/dev/null || true
             gh issue create --title "$TITLE" --label drift --body-file body.md
           fi
           echo "::error::Live state of ${{ matrix.target }} has drifted from Git"

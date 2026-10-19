@@ -52,6 +52,30 @@ class GitHubLabelsProviderTest {
     }
 
     @Test
+    void renamesThroughNewNameWhenOnlyTheCaseDiffers() {
+        api.stubFor(patch(urlEqualTo("/repos/octo/repo/labels/Drift")).willReturn(okJson("{}")));
+        var live = Json.MAPPER.createObjectNode().put("name", "Drift").put("color", "d93f0b");
+        var desired = live.deepCopy().put("name", "drift");
+        var plan = gitops.Planner.plan("t", "t", gitops.Kind.LABELS, false, List.of(desired), List.of(live));
+
+        assertThat(plan.changes()).singleElement().satisfies(c -> assertThat(c.action()).isEqualTo(gitops.Plan.Action.UPDATE));
+        provider(null).update(live, desired, plan.changes().get(0).diffs());
+
+        api.verify(patchRequestedFor(urlEqualTo("/repos/octo/repo/labels/Drift"))
+                .withRequestBody(equalToJson("{\"new_name\": \"drift\"}")));
+    }
+
+    @Test
+    void reportsTheApiErrorForNamesWithDollarSigns() {
+        api.stubFor(delete(urlEqualTo("/repos/octo/repo/labels/cost%241")).willReturn(jsonResponse("{\"message\": \"nope\"}", 422)));
+        var live = Json.MAPPER.createObjectNode().put("name", "cost$1");
+
+        assertThatThrownBy(() -> provider(null).delete(live))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("/repos/octo/repo/labels/cost$1").hasMessageContaining("422");
+    }
+
+    @Test
     void rejectsMalformedRepositoryNames() {
         assertThatThrownBy(() -> new GitHubLabelsProvider(api.baseUrl(), "just-a-name", null))
                 .hasMessageContaining("owner/name");

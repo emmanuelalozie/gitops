@@ -15,4 +15,12 @@ public interface Provider {
     void update(ObjectNode live, ObjectNode desired, List<FieldDiff> diffs);
 
     void delete(ObjectNode live);
+
+    /**
+     * Whether these changes can't be made in place, so the resource has to be deleted and created again.
+     * The applier then deletes it with the other deletes and creates it with the other creates.
+     */
+    default boolean requiresReplace(List<FieldDiff> diffs) {
+        return false;
+    }
 }

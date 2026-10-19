@@ -1,6 +1,7 @@
 package gitops.providers;
 
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
+import gitops.Applier;
 import gitops.Kind;
 import gitops.Plan;
 import gitops.Planner;
@@ -49,16 +50,20 @@ class UsersProviderTest {
     }
 
     @Test
-    void replacesTheUserWhenTheIdChanges() {
-        api.stubFor(delete("/users/1").willReturn(okJson("{}")));
+    void swapsIdsBetweenUsersWithoutACollision() {
+        api.stubFor(delete(urlMatching("/users/.*")).willReturn(okJson("{}")));
         api.stubFor(post("/users").willReturn(jsonResponse("{}", 201)));
-        Plan.Change change = Planner.plan("t", "t", Kind.USERS, true,
-                List.of(user(15, "Bret", "a@b.io")), List.of(user(1, "Bret", "a@b.io"))).changes().get(0);
+        Plan plan = Planner.plan("t", "t", Kind.USERS, true,
+                List.of(user(2, "Bret", "a@b.io"), user(1, "Antonette", "c@d.io")),
+                List.of(user(1, "Bret", "a@b.io"), user(2, "Antonette", "c@d.io")));
 
-        provider().update(change.live(), change.desired(), change.diffs());
+        Applier.apply(plan, provider(), System.out);
 
-        api.verify(deleteRequestedFor(urlEqualTo("/users/1")));
-        api.verify(postRequestedFor(urlEqualTo("/users")).withRequestBody(matchingJsonPath("$.id", equalTo("15"))));
+        // Both old ids are freed before either user is created under its new one.
+        List<String> calls = api.getAllServeEvents().reversed().stream()
+                .map(e -> e.getRequest().getMethod() + " " + e.getRequest().getUrl()).toList();
+        assertThat(calls).containsExactly("DELETE /users/1", "DELETE /users/2", "POST /users", "POST /users");
+        api.verify(0, patchRequestedFor(anyUrl()));
     }
 
     @Test
