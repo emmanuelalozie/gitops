@@ -270,6 +270,9 @@ pub struct Proposal {
     #[serde(default)]
     pub body: String,
     pub paths: Vec<String>,
+    /// Labels for the pull request, such as "promotion".
+    #[serde(default)]
+    pub labels: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -466,6 +469,7 @@ pub(crate) mod tests {
             branch: "gitops/add-ann".into(),
             title: "Add Ann".into(),
             body: "Requested in the app".into(),
+            labels: vec![],
             paths: vec!["config/dev/users/ann.json".into()],
         })
         .unwrap();
@@ -487,7 +491,7 @@ pub(crate) mod tests {
         let p = dir.path();
         std::fs::write(p.join("config/dev/users/bret.json"), "x\n").unwrap();
         let bad = |branch: &str, paths: Vec<&str>| {
-            propose(p, &Proposal { branch: branch.into(), title: "t".into(), body: String::new(), paths: paths.into_iter().map(String::from).collect() })
+            propose(p, &Proposal { branch: branch.into(), title: "t".into(), body: String::new(), paths: paths.into_iter().map(String::from).collect(), labels: vec![] })
                 .unwrap_err()
                 .code
         };

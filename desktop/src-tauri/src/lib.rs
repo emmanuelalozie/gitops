@@ -175,7 +175,29 @@ async fn engine_call(state: State<'_, AppState>, method: String, params: Option<
         return Err(AppError::new("engine", "not_allowed", format!("The app doesn't call the engine method '{method}'")));
     }
     let engine = state.engine()?;
-    engine.call(&method, params.unwrap_or_else(|| json!({}))).await
+    let params = params.unwrap_or_else(|| json!({}));
+    if method == "plan.apply" {
+        check_local_apply(&engine, &params).await?;
+    }
+    engine.call(&method, params).await
+}
+
+/// A second check behind the engine's: the target must say "localApply": true and the call must carry a plan id.
+async fn check_local_apply(engine: &Engine, params: &Value) -> Result<()> {
+    let target = params.get("target").and_then(Value::as_str).unwrap_or_default();
+    if params.get("planId").and_then(Value::as_str).is_none_or(str::is_empty) {
+        return Err(AppError::new("engine", "not_allowed", "Applying needs the id of the plan you approved"));
+    }
+    let targets = engine.call("targets.list", json!({})).await?;
+    let local = targets["targets"].as_array().into_iter().flatten().any(|t| t["name"] == target && t["localApply"] == true);
+    if !local {
+        return Err(AppError::new(
+            "engine",
+            "not_allowed",
+            format!("'{target}' changes through pull requests, not from this app (it doesn't set \"localApply\": true)"),
+        ));
+    }
+    Ok(())
 }
 
 /// Restarts the engine of the open repository (after its tokens change, or after it stopped).
@@ -286,7 +308,15 @@ async fn propose(state: State<'_, AppState>, proposal: git::Proposal) -> Result<
     }
     match state.github_token() {
         Some(token) => match state.github.create_pull(&github, &token, &result.proposed.branch, &base, &proposal.title, &proposal.body).await {
-            Ok(pull) => result.pull_request = Some(pull),
+            Ok(pull) => {
+                if !proposal.labels.is_empty() {
+                    if let Some(number) = pull["number"].as_u64() {
+                        // Best effort: a missing label shouldn't hide the pull request that was opened.
+                        let _ = state.github.add_labels(&github, &token, number, &proposal.labels).await;
+                    }
+                }
+                result.pull_request = Some(pull)
+            }
             Err(e) => {
                 result.pull_request_error = Some(e);
                 result.compare_url = Some(github::compare_url(&github, &base, &result.proposed.branch));
@@ -412,4 +442,27 @@ pub fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Against this repository's own config: dev sets localApply, prod doesn't. Skipped without a built engine.
+    #[tokio::test]
+    async fn only_local_apply_targets_with_a_plan_id_get_through() {
+        let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().unwrap();
+        let Ok(location) = engine::locate(None, None, &repo, std::env::var_os("JAVA_HOME").map(PathBuf::from)) else {
+            eprintln!("skipped: run ./gradlew engineBundle first");
+            return;
+        };
+        let engine = Engine::start(&location, &repo, &HashMap::new(), |_, _| {}).unwrap();
+
+        let prod = check_local_apply(&engine, &json!({"target": "prod", "planId": "abc"})).await.unwrap_err();
+        assert_eq!(prod.code, "not_allowed");
+        assert!(prod.message.contains("pull requests"));
+        let no_id = check_local_apply(&engine, &json!({"target": "dev"})).await.unwrap_err();
+        assert!(no_id.message.contains("plan you approved"));
+        check_local_apply(&engine, &json!({"target": "dev", "planId": "abc"})).await.unwrap();
+    }
 }

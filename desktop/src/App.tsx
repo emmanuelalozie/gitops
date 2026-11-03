@@ -5,6 +5,7 @@ import { RepoProvider, useRepo } from "./state";
 import { Changes } from "./views/Changes";
 import { Compare } from "./views/Compare";
 import { GitHub } from "./views/GitHub";
+import { Graph } from "./views/Graph";
 import { Overview } from "./views/Overview";
 import { Problems } from "./views/Problems";
 import { Settings } from "./views/Settings";
@@ -44,6 +45,8 @@ function Router() {
       return <Compare />;
     case "github":
       return <GitHub />;
+    case "graph":
+      return <Graph />;
     case "settings":
       return <Settings />;
   }

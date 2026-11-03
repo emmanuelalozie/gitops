@@ -12,15 +12,15 @@ import { useRepo } from "../state";
  * pull request. Git stays the only way in, so the Plan and Apply workflows take it from there.
  */
 export function Changes() {
-  const { repo, revision, plans, reload } = useRepo();
+  const { repo, revision, plans, reload, draft, setDraft } = useRepo();
   const [changes, setChanges] = useState<Load<ConfigChange[]>>({ state: "loading" });
   const [chosen, setChosen] = useState<Set<string>>(new Set());
   const [preview, setPreview] = useState<string | null>(null);
   const [diff, setDiff] = useState<Load<string>>({ state: "idle" });
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(draft?.title ?? "");
   const [branch, setBranch] = useState("");
   const [branchEdited, setBranchEdited] = useState(false);
-  const [body, setBody] = useState("");
+  const [body, setBody] = useState(draft?.body ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<AppError | null>(null);
   const [result, setResult] = useState<ProposeResult | null>(null);
@@ -30,7 +30,10 @@ export function Changes() {
     api.configChanges().then(
       (value) => {
         setChanges({ state: "ok", value, at: Date.now() });
-        setChosen((c) => new Set(value.map((v) => v.path).filter((p) => c.size === 0 || c.has(p))));
+        setChosen((c) => {
+          const wanted = c.size > 0 ? c : draft ? new Set(draft.paths) : null;
+          return new Set(value.map((v) => v.path).filter((p) => !wanted || wanted.has(p)));
+        });
       },
       (e: AppError) => setChanges({ state: "error", error: e }),
     );
@@ -64,7 +67,8 @@ export function Changes() {
     setError(null);
     try {
       const text = [body.trim(), targets.length ? `Plan from the GitOps app, against the live systems right now:\n\n${planNotes}` : ""].filter(Boolean).join("\n\n");
-      setResult(await api.propose({ branch: effectiveBranch, title: effectiveTitle, body: text, paths: [...chosen] }));
+      setResult(await api.propose({ branch: effectiveBranch, title: effectiveTitle, body: text, paths: [...chosen], labels: draft?.labels ?? [] }));
+      setDraft(null);
       setTitle("");
       setBody("");
       setBranchEdited(false);
@@ -140,6 +144,7 @@ export function Changes() {
                 </div>
               );
             })}
+            {draft && draft.labels.length > 0 && <p className="small muted">Labels: {draft.labels.map((l) => <code key={l}>{l}</code>)}</p>}
             <label>Title<input value={title} placeholder={suggestedTitle} onChange={(e) => setTitle(e.target.value)} /></label>
             <label>Branch<input value={effectiveBranch} onChange={(e) => { setBranch(e.target.value); setBranchEdited(true); }} spellCheck={false} /></label>
             <label>Description<textarea rows={4} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Why this change? The plan summary is added for you." /></label>

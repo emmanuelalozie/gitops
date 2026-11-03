@@ -52,10 +52,12 @@ function emptyPlan(t: Target): Plan {
   };
 }
 
+let devApplied = false;
+
 function plan(name: string): Plan {
   const t = demoTargets.find((x) => x.name === name);
   if (!t) throw { kind: "engine", code: "usage", message: `No target '${name}'` };
-  if (name === "dev") return planFixture as Plan;
+  if (name === "dev") return devApplied ? emptyPlan(t) : (planFixture as Plan);
   if (t.tokenRequired) {
     return { ...emptyPlan(t), skipped: true, planId: null, skipReason: `'${name}' needs a token in ${t.tokenVariable}, which isn't set.` };
   }
@@ -112,7 +114,30 @@ async function engineCall(method: string, params: Record<string, unknown>): Prom
       return { file: "", removed: i >= 0 };
     }
     case "targets.compare":
-      return { ...emptyPlan(demoTargets[0]!), target: `${params.from} -> ${params.to}`, from: params.from, to: params.to };
+      return { ...(planFixture as Plan), planId: null, target: `${params.from} -> ${params.to}`, description: "users in Git", from: params.from, to: params.to };
+    case "plan.apply": {
+      const target = String(params.target);
+      if (target !== "dev") throw { kind: "engine", code: "not_allowed", message: `'${target}' changes through pull requests, not from this app` };
+      const current = plan(target);
+      if (params.planId !== current.planId) {
+        throw { kind: "engine", code: "plan_changed", message: "The plan changed since it was approved. Nothing was applied.", details: { expected: params.planId, actual: current.planId } };
+      }
+      const steps: [string, string][] = [];
+      const replaced = current.changes.filter((c) => c.replace);
+      current.changes.filter((c) => c.action === "delete").forEach((c) => steps.push([c.key, "delete"]));
+      replaced.forEach((c) => steps.push([c.key, "delete-to-replace"]));
+      current.changes.filter((c) => c.action === "update" && !c.replace).forEach((c) => steps.push([c.key, "update"]));
+      current.changes.filter((c) => c.action === "create").forEach((c) => steps.push([c.key, "create"]));
+      replaced.forEach((c) => steps.push([c.key, "create-replacement"]));
+      for (const [key, step] of steps) {
+        for (const state of ["starting", "finished"]) {
+          await delay(null, 120);
+          demo.emit("engine-notification", { method: "apply.progress", params: { requestId: 1, target, key, step, state } });
+        }
+      }
+      devApplied = true;
+      return { schemaVersion: 1, target, planId: current.planId, applied: true, verified: true, verifyAfterApply: true, after: plan(target) };
+    }
     case "repo.lint":
       return {
         ok: true, findings: [],

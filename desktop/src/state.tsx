@@ -12,6 +12,7 @@ export type Page =
   | { name: "changes" }
   | { name: "compare" }
   | { name: "github"; tab?: string }
+  | { name: "graph" }
   | { name: "settings" };
 
 interface RepoState {
@@ -31,6 +32,16 @@ interface RepoState {
   close: () => void;
   /** Bumped whenever files under config/ change, so views showing file contents reload them. */
   revision: number;
+  /** A pull request being prepared elsewhere (a promotion), which the Changes page starts from. */
+  draft: Draft | null;
+  setDraft: (draft: Draft | null) => void;
+}
+
+export interface Draft {
+  title: string;
+  body: string;
+  labels: string[];
+  paths: string[];
 }
 
 const Context = createContext<RepoState | null>(null);
@@ -56,6 +67,7 @@ export function RepoProvider({ initial, onClose, children }: { initial: RepoInfo
   const [validation, setValidation] = useState<Load<Validation>>({ state: "loading" });
   const [lint, setLint] = useState<Load<Lint>>({ state: "loading" });
   const [changeCount, setChangeCount] = useState(0);
+  const [draft, setDraft] = useState<Draft | null>(null);
   const [page, setPage] = useState<Page>({ name: "overview" });
   const [revision, setRevision] = useState(0);
   const targetsRef = useRef<Target[]>([]);
@@ -97,8 +109,8 @@ export function RepoProvider({ initial, onClose, children }: { initial: RepoInfo
   }, [reload, planTarget]);
 
   const value = useMemo<RepoState>(
-    () => ({ repo, targets, plans, validation, lint, changeCount, page, go: setPage, planTarget, planAll, reload, setRepo, close: onClose, revision }),
-    [repo, targets, plans, validation, lint, changeCount, page, planTarget, planAll, reload, onClose, revision],
+    () => ({ repo, targets, plans, validation, lint, changeCount, page, go: setPage, planTarget, planAll, reload, setRepo, close: onClose, revision, draft, setDraft }),
+    [repo, targets, plans, validation, lint, changeCount, page, planTarget, planAll, reload, onClose, revision, draft],
   );
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }

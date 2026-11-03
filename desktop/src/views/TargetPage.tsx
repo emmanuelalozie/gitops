@@ -5,6 +5,7 @@ import type { Resource, Target } from "../lib/types";
 import { PlanView } from "../components/PlanView";
 import { Empty, ErrorBox, HealthBadge, Spinner, Tabs, Tag } from "../components/ui";
 import { useRepo } from "../state";
+import { ApplyDialog } from "../components/ApplyDialog";
 import { ConfigTab } from "./ConfigTab";
 import { HistoryTab } from "./HistoryTab";
 
@@ -16,6 +17,8 @@ export function TargetPage({ name }: { name: string }) {
   if (!target) return <Empty title={`No target '${name}'`}>It may have been removed from config/.</Empty>;
   const plan = plans[name];
   const tab = ((page.name === "target" && page.tab) || "plan") as Tab;
+  const [applying, setApplying] = useState(false);
+  const canApply = target.localApply && plan?.state === "ok" && plan.value.hasChanges && !plan.value.skipped && plan.value.planId;
 
   return (
     <div className="page">
@@ -27,8 +30,14 @@ export function TargetPage({ name }: { name: string }) {
           <p className="muted">{target.description}</p>
           <TargetFacts target={target} />
         </div>
-        <button onClick={() => void planTarget(name)} disabled={plan?.state === "loading"}>Re-plan</button>
+        <div className="head-actions">
+          {canApply && <button className="danger" onClick={() => setApplying(true)}>Apply…</button>}
+          <button onClick={() => void planTarget(name)} disabled={plan?.state === "loading"}>Re-plan</button>
+        </div>
       </header>
+      {applying && plan?.state === "ok" && (
+        <ApplyDialog target={target} plan={plan.value} onClose={(applied) => { setApplying(false); if (applied) void planTarget(name); }} />
+      )}
       <Tabs<Tab>
         tabs={[
           { id: "plan", label: "Plan" },
@@ -46,7 +55,10 @@ export function TargetPage({ name }: { name: string }) {
           {plan?.state === "error" && <ErrorBox error={plan.error} />}
           {plan?.state === "ok" && (
             <>
-              <p className="muted small">Planned {relativeTime(plan.at)} against <code>{target.endpoint}</code>.</p>
+              <p className="muted small">
+                Planned {relativeTime(plan.at)} against <code>{target.endpoint}</code>.
+                {!target.localApply && plan.value.hasChanges && " This target changes through pull requests: merge to apply, or start the Apply workflow."}
+              </p>
               <PlanView plan={plan.value} />
             </>
           )}

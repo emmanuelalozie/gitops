@@ -290,6 +290,40 @@ button.cell { cursor: pointer; }
 .dispatch { display: grid; gap: 8px; }
 .dispatch-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; }
 
+/* Phase 4: apply, graph, promotion */
+.head-actions { display: flex; gap: 8px; }
+.dialog { border: 1px solid var(--border); border-radius: 12px; background: var(--panel); color: var(--text); width: min(620px, 92vw); padding: 20px 24px; }
+.dialog::backdrop { background: rgb(0 0 0 / .45); }
+.dialog h2 { margin-top: 0; }
+.dialog form { display: grid; gap: 12px; }
+.apply-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; max-height: 40vh; overflow: auto; }
+.apply-list .verb { display: inline-block; width: 56px; font-weight: 600; }
+.confirm-input { display: grid; gap: 4px; }
+.step { margin-left: 10px; font-size: 12.5px; }
+.step-finished { color: var(--create); }
+.step-failed { color: var(--delete); }
+.step-starting { color: var(--info); }
+.page.wide { max-width: none; }
+.graph-wrap { overflow: auto; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+.graph { width: 100%; height: auto; max-width: max-content; }
+.graph-col { font-size: 11px; fill: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.graph-edge { fill: none; stroke: var(--border); stroke-width: 1.6; }
+.graph-edge.broken { stroke: var(--delete); stroke-dasharray: 5 4; }
+.graph-node rect { fill: var(--panel-2); stroke: var(--border); }
+.graph-node.clickable { cursor: pointer; }
+.graph-node.clickable:hover rect, .graph-node.clickable:focus rect { stroke: var(--accent); }
+.graph-node:focus { outline: none; }
+.graph-label { font-size: 12.5px; font-weight: 600; fill: var(--text); font-family: var(--mono); }
+.graph-sub { font-size: 11px; fill: var(--muted); }
+.graph-node.tone-danger rect { fill: var(--delete-bg); stroke: var(--delete); }
+.graph-node.tone-drift rect { stroke: var(--update); stroke-width: 2; }
+.graph-node.tone-in-sync rect { stroke: var(--create); stroke-width: 2; }
+.graph-node.tone-error rect { stroke: var(--delete); stroke-width: 2; }
+.promote { margin-top: 24px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; display: grid; gap: 10px; }
+.promote h2 { margin: 0; }
+.promote-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
+.promote-list label { display: flex; gap: 8px; align-items: center; }
+
 @media (prefers-reduced-motion: reduce) {
   .spin, .health-loading .dot, .dot.health-loading { animation: none; }
 }

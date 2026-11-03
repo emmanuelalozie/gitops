@@ -81,6 +81,11 @@ impl GitHub {
         self.send(Method::POST, path, Some(token), Some(body)).await
     }
 
+    pub async fn add_labels(&self, repo: &GitHubRepo, token: &str, number: u64, labels: &[String]) -> Result<()> {
+        self.post(&format!("/repos/{}/{}/issues/{number}/labels", repo.owner, repo.name), token, json!({"labels": labels})).await?;
+        Ok(())
+    }
+
     /// Opens a pull request from `branch` into `base`.
     pub async fn create_pull(&self, repo: &GitHubRepo, token: &str, branch: &str, base: &str, title: &str, body: &str) -> Result<Value> {
         let pull = self

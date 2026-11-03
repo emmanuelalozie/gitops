@@ -30,3 +30,28 @@ it("lists changes and proposes them", async () => {
   fireEvent.click(submit);
   expect(await screen.findByText(/open pull request form/)).toBeTruthy();
 });
+
+it("applies the dev plan only after the target name is typed, then shows it verified", async () => {
+  render(<App />);
+  fireEvent.click(await screen.findByText("Open a repository…"));
+  const nav = await screen.findByRole("navigation");
+  fireEvent.click(await within(nav).findByText("dev"));
+  const apply = await screen.findByText("Apply…", {}, { timeout: 3000 });
+  fireEvent.click(apply);
+  const confirm = screen.getByText(/^Apply \d+ changes?$/) as HTMLButtonElement;
+  expect(confirm.disabled).toBe(true);
+  fireEvent.change(screen.getByLabelText(/to confirm/), { target: { value: "dev" } });
+  expect(confirm.disabled).toBe(false);
+  fireEvent.click(confirm);
+  expect(await screen.findByText(/Applied and verified/, {}, { timeout: 5000 })).toBeTruthy();
+  expect(screen.getAllByText(/✓/).length).toBeGreaterThan(0);
+});
+
+it("offers apply only for targets that allow it", async () => {
+  render(<App />);
+  fireEvent.click(await screen.findByText("Open a repository…"));
+  const nav = await screen.findByRole("navigation");
+  fireEvent.click(await within(nav).findByText("prod"));
+  await screen.findByRole("tab", { name: "Plan" });
+  expect(screen.queryByText("Apply…")).toBeNull();
+});

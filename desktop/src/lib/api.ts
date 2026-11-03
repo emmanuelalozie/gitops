@@ -2,7 +2,7 @@
 // (npm run dev, or screenshots) they go to the demo backend in demo.ts, which serves the fixtures.
 
 import type {
-  AppError, AppInfo, Commit, ConfigChange, DriftData, EngineVersion, Json, Lint, Plan, Problem, Proposal, ProposeResult,
+  AppError, AppInfo, ApplyResult, Commit, ConfigChange, DriftData, EngineVersion, Json, Lint, Plan, Problem, Proposal, ProposeResult,
   PullDetails, PullRequest, RepoInfo, RepoStatus, Resource, ResourceEntry, RunsData, Target, TokenStatus, Validation,
 } from "./types";
 import { demo } from "./demo";
@@ -63,6 +63,7 @@ export const api = {
   checkResource: (target: string, resource: Resource, previousKey?: string) =>
     engine<{ ok: boolean; problems: Problem[] }>("resource.check", { target, resource, previousKey }),
   lint: () => engine<Lint>("repo.lint"),
+  apply: (target: string, planId: string) => engine<ApplyResult>("plan.apply", { target, planId }),
   resources: (target: string) => engine<{ resources: ResourceEntry[] }>("resources.list", { target }).then((r) => r.resources),
   writeResource: (target: string, resource: Resource, previousKey?: string) =>
     engine<{ file: string; removed: string[] }>("resource.write", { target, resource, previousKey }),

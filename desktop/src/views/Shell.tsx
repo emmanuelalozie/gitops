@@ -35,6 +35,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <NavButton page={{ name: "changes" }} current={page} count={changeCount} tone="info">Changes</NavButton>
           <NavButton page={{ name: "problems" }} current={page} count={problemCount}>Problems</NavButton>
           <NavButton page={{ name: "compare" }} current={page}>Compare</NavButton>
+          <NavButton page={{ name: "graph" }} current={page}>Graph</NavButton>
           {repo.git.github && <NavButton page={{ name: "github" }} current={page}>GitHub</NavButton>}
           <div className="nav-heading">Targets</div>
           {targets.state === "ok" &&

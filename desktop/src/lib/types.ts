@@ -167,6 +167,16 @@ export interface Proposal {
   title: string;
   body: string;
   paths: string[];
+  labels?: string[];
+}
+
+export interface ApplyResult {
+  target: string;
+  planId: string;
+  applied: boolean;
+  verified: boolean;
+  verifyAfterApply: boolean;
+  after: Plan | null;
 }
 
 export interface ProposeResult {

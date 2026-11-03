@@ -34,6 +34,9 @@ pub const ALLOWED_METHODS: &[&str] = &[
     "resource.write",
     "resource.delete",
     "repo.lint",
+    // Only for targets with "localApply": true, and only with the id of the plan the person approved.
+    // The engine enforces both; engine_call checks localApply too, before the request leaves the app.
+    "plan.apply",
 ];
 
 const STDERR_LINES: usize = 40;
