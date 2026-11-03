@@ -52,8 +52,8 @@ The protocol between Rust and the engine is in [docs/engine-protocol.md](../docs
 | File | What it does |
 | --- | --- |
 | `engine.rs` | Finds the engine (`GITOPS_ENGINE_DIR`, the copy bundled with the app, or the repository's `build/engine`), starts it, matches responses to requests by id, forwards `apply.progress`, and fails every waiting call with the engine's last stderr lines if it dies. Refuses an engine whose JSON `schemaVersion` it doesn't know. |
-| `lib.rs` | The commands the frontend may call, and the app state (one open repository and its engine). |
-| `git.rs` | Status, diffs, history, discard and propose, through the `git` command. |
+| `lib.rs` | The commands the frontend may call, the app state (every open repository's engine and watcher, and which is active), and the tray. |
+| `git.rs` | Status, diffs, history, blame by field, the audit log, discard, propose and revert, through the `git` command. |
 | `repo_check.rs` | Whether a folder can be opened, and if not why: inside a GitOps repository, no targets yet, or a regular project. |
 | `github.rs` | Pull requests, checks, plan comments, drift issues, workflow runs and dispatch, cached by ETag. |
 | `secrets.rs` | Tokens in the OS keychain. |
@@ -77,6 +77,8 @@ The app is built so that opening it, or clicking around, can't change a live sys
 - **Git stays the way in.** Edits change the working tree only. Proposing commits just the chosen files to a
   new branch, pushes it and opens a pull request; your other edits stay where they were. The Plan, Apply and
   Drift workflows take it from there.
+- **Reverts are pull requests too.** Undoing a change opens a branch with `git revert` and a pull request; nothing
+  is pushed to the default branch directly. Your uncommitted config edits must be committed or discarded first.
 - **Applies are narrow.** Only targets with `"localApply": true` (the `dev` mock) can be applied from the app,
   only after typing the target's name, and only with the id of the plan on screen. If the live system moved
   since, the engine refuses with `plan_changed` and nothing is applied. Rust checks `localApply` and the plan
@@ -100,8 +102,9 @@ The app is built so that opening it, or clicking around, can't change a live sys
 ## Limits
 
 - One repository at a time; one engine per repository.
-- The drift watch runs only while the app is open (there's no tray or background service). For drift found
-  while it's closed, rely on the daily Drift workflow and its issues (and `DRIFT_WEBHOOK_URL`).
+- The drift watch covers the repository on screen, while the app runs (in the tray when the window is closed).
+  When it isn't running, the daily Drift workflow and its issues (and `DRIFT_WEBHOOK_URL`) still catch drift.
+- Revert works on commits that only touch `config/`; anything else is reverted by hand.
 - Pull requests, issues and runs are read from the first page (50 pull requests, 100 drift issues, the last
   21 drift runs). History in a shallow clone stops at the clone's depth.
 - Starting a workflow and opening pull requests need `GITHUB_TOKEN` with access to the repository

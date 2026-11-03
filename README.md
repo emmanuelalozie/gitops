@@ -20,7 +20,7 @@ GitOps is a small infrastructure-as-code tool written in Java with Gradle, with 
 
 - **Git is the only way in.** Every change is a file edited in a pull request, reviewed and merged, so the history of the repository is the history of the system: who changed what, when and why. Rolling back is a `git revert`.
 - **You see the change before it happens.** A plan lists every resource that will be created, updated or deleted and every field that changes, not just the first difference. On a pull request it's posted as a comment, so reviewers approve the effect, not just the diff.
-- **Bad config never reaches a live system.** Every file is checked against a JSON Schema, its file name must match its key, and ids must be unique. All problems are reported at once, and plan and apply refuse to run until they're fixed. A missing config folder is an error, and apply refuses to delete every live resource because Git has none unless you pass `--allow-delete-all`.
+- **Bad config never reaches a live system.** Every file is checked against a JSON Schema, its file name must match its key, ids must be unique, and the rules in `config/policies.json` hold (such as "no branch may allow force pushes"). All problems are reported at once, and plan and apply refuse to run until they're fixed. A missing config folder is an error, and apply refuses to delete every live resource because Git has none unless you pass `--allow-delete-all`.
 - **Apply checks its own work.** After applying, it plans again and fails if anything still differs, so a change that the API quietly ignored doesn't look like a success.
 - **Drift gets noticed.** Once a day the live systems are compared with Git. If someone changed one by hand, an issue labelled `drift` opens with the plan, and it closes itself once they match again.
 - **Changes are tested first.** `dev` runs against a local mock API that CI builds from scratch on every pull request, applies and verifies.
@@ -108,6 +108,8 @@ The default branch is `develop`. To run the steps one at a time, start the mock 
 | `./gradlew snapshot -Ptarget=<t>` | Writes the live state into `config/<t>/` |
 | `./gradlew fetch -Ptarget=<t>` | Prints the live state as JSON |
 | `./gradlew targets` | Lists the targets and their settings |
+| `./gradlew search -Pargs="--query TEXT"` | Finds resources in Git across every target |
+| `./gradlew codeowners` | Writes each target's `owners` into `.github/CODEOWNERS` |
 | `./gradlew lint` | Checks across files: every status check a branch rule requires must come from a workflow job |
 | `./gradlew engineBundle` | Builds the engine with its own Java runtime for the desktop app, in `build/engine` |
 
@@ -129,7 +131,12 @@ The default branch is `develop`. To run the steps one at a time, start the mock 
 - **Apply:** only for targets with `"localApply": true` (`dev`, `dev-inventory`), after typing the target's name, and only the plan on screen: if the live system changed since, nothing is applied.
 - **Mock:** start and stop a target's local mock API (`"mock"` in its `target.json`) from its card. It runs from a copy of the seed, so restarting resets it, and it stops when the app closes.
 - **Add target:** another repository's labels, settings, branch protection or Actions variables, or a REST API with a schema drafted from what it returns, optionally importing what's live. It goes out through Changes like any edit.
-- **Watch for drift:** while the app is open, plan everything on a schedule and get a desktop notification when a target drifts, fails, or is back in sync.
+- **Watch for drift:** plan everything on a schedule and get a desktop notification when a target drifts, fails, or is back in sync. While watching, closing the window keeps the app in the tray.
+- **Why does Git say this?** For a field that differs, the commit, author and pull request that last set it in Git.
+- **Revert:** undo a past change, a merged pull request included, through a new pull request.
+- **Audit:** every config change on the main branch, the targets it touched, and whether the Apply workflow applied it.
+- **All changes and search:** every target's plan on one page, and resources found by key or value across every target.
+- **Workspace:** several GitOps repositories open at once, with every target of every repository planned side by side.
 
 Tokens are kept in the system keychain (Keychain, Credential Manager or Secret Service) and only ever reach the engine and GitHub. The app can open only `github.com` links, and the window itself loads nothing from the internet: GitHub requests go through the Rust side.
 
@@ -175,7 +182,8 @@ Git holds the desired state, and the engine never trusts anything else: every co
 | `Engine.java` | Everything the engine does, shared by the command line and the server |
 | `EngineServer.java` | `serve`: JSON-RPC on stdin and stdout for the desktop app, with apply progress |
 | `PlanJson.java`, `EngineError.java` | Plans and errors as JSON, and the plan id |
-| `Lint.java` | Cross-file checks: required status checks against the jobs in `.github/workflows` |
+| `Lint.java` | Cross-file checks: required status checks against the jobs in `.github/workflows`, and CODEOWNERS against `owners` |
+| `Policies.java`, `HealthCheck.java`, `ApplyWindow.java`, `CodeOwners.java` | Policy rules, health checks after apply, apply windows, and the generated CODEOWNERS block |
 | `Demo.java`, `MockServer.java` | `./gradlew demo`: starts the mock with Node.js or Docker, runs plan, apply and a drift check, stops it. `MockServer` is shared with the app's mock button. |
 | `Mocks.java` | The mocks the engine server started for the app, stopped when it exits |
 | `Target.java` | One managed system: `config/<name>/target.json`, its settings and its provider |
@@ -230,10 +238,15 @@ Each folder under `config/` with a `target.json` is a target. Its resources are 
 
 | Setting in `target.json` | Purpose |
 | --- | --- |
-| `kind` | `users`, `labels`, `repository`, `branch-protection`, `actions-variables` or `rest` |
+| `kind` | `users`, `rest`, or a GitHub kind: `labels`, `repository`, `branch-protection`, `actions-variables`, `environments`, `webhooks`, `collaborators`, `teams` or `rulesets` |
 | `baseUrl` | `users` and `rest`: the API's base URL |
 | `resource`, `path`, `key`, `idField`, `updateMethod`, `schema` | `rest` only: the collection's folder name (`items`), its path in the API (default `/<resource>`), the field that identifies an item across Git and the API (default the id field), the API's id used in URLs (default `id`), `PATCH` (changed fields, the default) or `PUT` (the whole item), and the schema file (default `<resource>.schema.json` next to `target.json`). Only the fields the schema declares are managed. |
 | `mock` | A seed file in the repository, such as `mock/db.json`, that the desktop app can serve as this target's local mock API. Only for `127.0.0.1` or `localhost` URLs. |
+| `listField`, `pagination`, `headers`, `tokenHeader`, `tokenPrefix` | `rest` only, for real-world APIs: where the list is in a wrapped response (a JSON Pointer such as `/result`), `{"pageParam": "page", "sizeParam": "per_page", "size": 100}` to read every page, fixed non-secret headers, and how the token is sent (default `Authorization: Bearer <token>`). |
+| `environment` | The GitHub environment whose required reviewers approve this target's apply (default `production`). |
+| `owners` | GitHub users or teams who review changes to this target, such as `["@alice", "@org/platform"]`. `./gradlew codeowners` writes them into `.github/CODEOWNERS`; with "require code owner reviews" on in branch protection, their approval is required. |
+| `applyWindow` | When the target may change: `{"days": ["sat", "sun"], "start": "02:00", "end": "05:00", "timezone": "Europe/London"}`. Outside it, the Apply workflow defers the change; its hourly run applies it once the window opens. |
+| `healthCheck` | Checked after every apply: `{"url": "{baseUrl}/health", "expectStatus": 200, "contains": "ok", "timeoutSeconds": 60}`. A failed check fails the apply. |
 | `repository` | GitHub kinds: `owner/name` |
 | `prune` | Delete live resources that aren't in Git. Off: list them as unmanaged and leave them alone. |
 | `verifyAfterApply` | Plan again after applying and fail if anything still differs (on by default) |
@@ -282,7 +295,7 @@ Each folder under `config/` with a `target.json` is a target. Its resources are 
 | --- | --- | --- |
 | `ci.yml` | Every pull request and push to `develop` | Build, tests and validation, then apply `dev` to a fresh mock and fail on remaining drift |
 | `plan.yml` | Pull requests that touch `config/`, `src/` or `build.gradle` | Plans every target with `workflows` on and keeps one comment on the pull request up to date |
-| `apply.yml` | Pushes to `develop` that touch `config/` (except `config/dev`), or by hand | Applies every target with `workflows` on in the `production` environment, one at a time |
+| `apply.yml` | Pushes to `develop` that touch `config/` (except `config/dev`), by hand, and hourly for targets with an apply window | Applies every target with `workflows` on, one at a time, each in its `environment` (default `production`), deferring targets outside their apply window |
 | `drift.yml` | Daily at 06:17 UTC, or by hand | Plans each of those targets, opens or updates a `drift` issue when they differ (read from the JSON plan), and closes it once they match |
 | `desktop.yml` | Pull requests and pushes that touch `desktop/`, `src/` or `build.gradle`, or by hand | Tests the desktop app against the real engine; by hand, also builds installers |
 
@@ -300,7 +313,9 @@ A few things still live in GitHub's settings, because changing them needs more t
 
 **A REST API needs no code.** Add `config/<target>/target.json` with `"kind": "rest"`, its `baseUrl`, `resource` and `key`, and a JSON Schema for its items (see `config/dev-inventory`), or use **Add target** in the desktop app, which drafts the schema from what the API returns. Then `./gradlew snapshot -Ptarget=<target>` writes what's live into Git.
 
-**Another GitHub repository** works the same way: a target with `"kind": "labels"` (or `repository`, `branch-protection`, `actions-variables`) and `"repository": "owner/name"`.
+**Another GitHub repository** works the same way: a target with `"kind": "labels"` (or any GitHub kind: `repository`, `branch-protection`, `actions-variables`, `environments`, `webhooks`, `collaborators`, `teams`, `rulesets`) and `"repository": "owner/name"`. All but labels need `GITOPS_ADMIN_TOKEN`.
+
+**Rules beyond the schema** go in `config/policies.json`. Each rule names the targets or kinds it covers, one field, and a check (`required`, `equals`, `notEquals`, `oneOf` or `pattern`), plus a message saying why. This repository's rules forbid force pushes and branch deletion, and keep inventory in aisles A to C.
 
 For an API that doesn't fit that pattern, add a built-in kind:
 

@@ -22,6 +22,8 @@ After a deliberate change, regenerate them with `./gradlew test -Dgitops.updateF
 | `plan --format json` | A plan (below) on stdout |
 | `plan --json-out FILE` | The same plan in a file, next to text or Markdown output from the same live read |
 | `apply --plan-id ID` | Applies only if the plan is still the one with that id; otherwise exits with 3 and changes nothing |
+| `apply --respect-window` | A target outside its `applyWindow` isn't changed; prints when the window opens and exits 0 |
+| `search --query TEXT` | Resources in Git across every target whose key or any value contains the text |
 | `apply --format json` | Progress on stderr, the result on stdout |
 | `validate --format json` | `{ok, targets: [{name, kind, files, ok, problems: [{file, pointer, message}]}], warnings}` |
 | `targets --format json [--out FILE]` | `{targets: [{name, kind, keyField, endpoint, prune, verifyAfterApply, localApply, workflows, tokenVariable, tokenRequired, tokenPresent, resources, ...}]}` |
@@ -61,7 +63,7 @@ Exit codes: 0 success, 1 error, 2 drift with `--fail-on-drift`, 3 plan changed.
 }
 ```
 
-`type` is `users`, `github` or `rest`; for a `rest` target `kind` is its resource (such as `items`). `desired` and `live` hold managed fields only (those in the kind's schema). `replace` marks an update the
+Each change also has `file`, its path in Git (where it is, or would be), in plans the engine serves. `type` is `users`, `github` or `rest`; for a `rest` target `kind` is its resource (such as `items`). `desired` and `live` hold managed fields only (those in the kind's schema). `replace` marks an update the
 provider makes by deleting and creating the resource (a user whose `id` changes). A target skipped for a
 missing token has `skipped: true`, `skipReason`, `planId: null` and no changes.
 
@@ -87,7 +89,7 @@ Requests run in parallel on a small pool; anything that changes a target (`plan.
 | `targets.list` | | as `targets --format json` |
 | `config.validate` | `target?` | as `validate --format json` (without warnings) |
 | `plan.compute` | `target` | a plan; a skipped plan when the target's token isn't set |
-| `plan.apply` | `target`, `planId`, `allowDeleteAll?` | `{applied, verified, verifyAfterApply, planId, after}`; only for targets with `"localApply": true` |
+| `plan.apply` | `target`, `planId`, `allowDeleteAll?` | `{applied, verified, verifyAfterApply, planId, after, deferred, health}`; only for targets with `"localApply": true`; respects the apply window (`deferred` says why nothing ran) and runs the health check after verifying |
 | `live.fetch` | `target` | `{resources: [...]}` (everything the live system returns) |
 | `targets.compare` | `from`, `to` | a plan that would make `to`'s Git config match `from`'s, plus `from` and `to` |
 | `resources.list` | `target` | `{resources: [{key, file, resource}]}` from Git; an unreadable file has `error` and `resource: null` |
@@ -96,6 +98,8 @@ Requests run in parallel on a small pool; anything that changes a target (`plan.
 | `resource.write` | `target`, `resource`, `previousKey?` | `{file, removed: [...]}`; writes in the canonical file format, refuses invalid resources |
 | `resource.delete` | `target`, `key` | `{file, removed}` |
 | `repo.lint` | | as `lint --format json` |
+| `resources.search` | `query`, `limit?` | `{results: [{target, kind, key, file, fields, resource}], truncated}` |
+| `health.check` | `target` | `{ok, url, status, message, seconds}`, or null without a health check |
 | `targets.create` | `name`, `settings`, `schema?` | the new target, as in `targets.list`; writes `config/<name>/target.json` (and a `rest` target's schema), never overwriting, and removes what it wrote if it doesn't load |
 | `targets.snapshot` | `target` | `{written, before, dir}`: the live state written into Git |
 | `rest.inferSchema` | `baseUrl`, `path` | `{schema}`: a first JSON Schema from what the collection returns now |
