@@ -89,3 +89,15 @@ it("adds a target for another repository and imports what's live", async () => {
   const nav = screen.getByRole("navigation");
   expect(within(nav).getByText("inventory-manager-labels")).toBeTruthy();
 });
+
+it("watches for drift and notifies only about changes", async () => {
+  const { notifications } = await import("./lib/demo");
+  render(<App />);
+  fireEvent.click(await screen.findByText("Open a repository…"));
+  await screen.findByRole("navigation");
+  fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+  fireEvent.click(await screen.findByLabelText("Watch"));
+  expect(await screen.findByText(/last looked/, {}, { timeout: 4000 })).toBeTruthy();
+  // The first look is the baseline: dev already drifts, so nothing is new.
+  expect(notifications).toEqual([]);
+});

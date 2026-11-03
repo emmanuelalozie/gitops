@@ -22,6 +22,9 @@ const COMMANDS: &[&str] = &[
     "github_drift",
     "github_runs",
     "github_dispatch",
+    "watch_settings",
+    "set_watch_settings",
+    "notify",
 ];
 
 fn main() {

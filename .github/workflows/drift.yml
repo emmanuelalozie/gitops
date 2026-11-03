@@ -43,6 +43,8 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GITOPS_ADMIN_TOKEN: ${{ secrets.GITOPS_ADMIN_TOKEN }}
+      # Optional: a Slack-compatible incoming webhook ({"text": ...}) told when a drift issue opens or closes.
+      DRIFT_WEBHOOK_URL: ${{ secrets.DRIFT_WEBHOOK_URL }}
       TITLE: Drift detected in ${{ matrix.target }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
@@ -75,10 +77,22 @@ jobs:
             # The drift label is managed in config/github/labels; only create it, from that file, if it's missing.
             label=config/github/labels/drift.json
             gh label create drift --color "$(jq -r .color "$label")" --description "$(jq -r .description "$label")" 2>/dev/null || true
-            gh issue create --title "$TITLE" --label drift --body-file body.md
+            url=$(gh issue create --title "$TITLE" --label drift --body-file body.md)
+            # Only a new issue is announced; while it stays open, the daily comments on it are the record.
+            if [ -n "$DRIFT_WEBHOOK_URL" ]; then
+              text="Drift detected in ${{ matrix.target }}: $(jq -r '"\(.summary.create) to create, \(.summary.update) to update, \(.summary.delete) to delete"' plan.json). $url"
+              jq -n --arg text "$text" '{text: $text}' | curl -fsS -X POST -H 'Content-Type: application/json' --data @- "$DRIFT_WEBHOOK_URL" > /dev/null \
+                || echo "::warning::Couldn't post to DRIFT_WEBHOOK_URL"
+            fi
           fi
           echo "::error::Live state of ${{ matrix.target }} has drifted from Git"
           exit 1
       - name: Close the drift issue
         if: steps.plan.outputs.drift == 'false' && steps.issue.outputs.number != ''
-        run: gh issue close "${{ steps.issue.outputs.number }}" --comment "No drift as of $RUN_URL."
+        run: |
+          gh issue close "${{ steps.issue.outputs.number }}" --comment "No drift as of $RUN_URL."
+          if [ -n "$DRIFT_WEBHOOK_URL" ]; then
+            jq -n --arg text "${{ matrix.target }} is back in sync with Git (closed drift issue #${{ steps.issue.outputs.number }})." '{text: $text}' \
+              | curl -fsS -X POST -H 'Content-Type: application/json' --data @- "$DRIFT_WEBHOOK_URL" > /dev/null \
+              || echo "::warning::Couldn't post to DRIFT_WEBHOOK_URL"
+          fi

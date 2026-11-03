@@ -29,6 +29,9 @@
     "allow-github-pull-details",
     "allow-github-drift",
     "allow-github-runs",
-    "allow-github-dispatch"
+    "allow-github-dispatch",
+    "allow-watch-settings",
+    "allow-set-watch-settings",
+    "allow-notify"
   ]
 }

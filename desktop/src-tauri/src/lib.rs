@@ -22,6 +22,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_opener::OpenerExt;
 
 /// An open repository: its engine and the watcher on its files.
@@ -378,6 +379,32 @@ async fn github_dispatch(state: State<'_, AppState>, workflow: String, git_ref: 
     state.github.dispatch(&github_repo(&state)?, &token, &workflow, &git_ref).await
 }
 
+#[tauri::command]
+fn watch_settings(state: State<'_, AppState>) -> settings::Watch {
+    state.settings.lock().unwrap().watch.clone()
+}
+
+#[tauri::command]
+fn set_watch_settings(state: State<'_, AppState>, enabled: bool, minutes: u32) -> Result<settings::Watch> {
+    let watch = settings::Watch::clamped(enabled, minutes);
+    state.settings.lock().unwrap().watch = watch.clone();
+    state.save_settings()?;
+    Ok(watch)
+}
+
+/// A desktop notification (drift found by the watch). Plain text, kept short; the page itself has no
+/// notification permission.
+#[tauri::command]
+fn notify(app: AppHandle, title: String, body: String) -> Result<()> {
+    let clip = |s: String, n: usize| if s.chars().count() > n { s.chars().take(n - 1).collect::<String>() + "…" } else { s };
+    app.notification()
+        .builder()
+        .title(clip(title, 80))
+        .body(clip(body, 300))
+        .show()
+        .map_err(|e| AppError::internal(format!("Couldn't show a notification: {e}")))
+}
+
 /// Opens a GitHub page in the browser. Nothing else: the webview can't open arbitrary URLs.
 #[tauri::command]
 fn open_url(app: AppHandle, url: String) -> Result<()> {
@@ -392,6 +419,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let settings_file = app.path().app_config_dir()?.join("settings.json");
             let api = std::env::var("GITHUB_API_URL").unwrap_or_else(|_| github::API.to_string());
@@ -426,6 +454,9 @@ pub fn run() {
             github_drift,
             github_runs,
             github_dispatch,
+            watch_settings,
+            set_watch_settings,
+            notify,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the GitOps app")

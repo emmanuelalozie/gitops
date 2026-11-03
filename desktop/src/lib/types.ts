@@ -268,3 +268,8 @@ export interface MockStatus {
   startedHere?: boolean;
   via?: string | null;
 }
+
+export interface WatchSettings {
+  enabled: boolean;
+  minutes: number;
+}

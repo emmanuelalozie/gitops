@@ -203,6 +203,9 @@ const repo = {
 };
 
 const tokens = new Map<string, boolean>();
+let watch = { enabled: false, minutes: 30 };
+/** Notifications the demo "showed", for tests. */
+export const notifications: { title: string; body: string }[] = [];
 const changes = new Set<string>(["config/dev/users/bret.json"]);
 const history = [
   { sha: "5dc5699aa", short: "5dc5699", author: "Emmanuel Alozie", date: "2026-10-30T18:02:11Z", subject: "Merge pull request #14 from emmanuelalozie/fix/demo-windows-localhost", pullRequest: 14 },
@@ -248,6 +251,14 @@ export const demo = {
           return { proposed: { branch: p.branch, commit: "f00dfeed", fromBranch: "develop", pushed: true, pushError: null }, base: "develop",
             pullRequest: null, compareUrl: `https://github.com/emmanuelalozie/gitops/compare/develop...${p.branch}?expand=1`, pullRequestError: null };
         }
+        case "watch_settings":
+          return watch;
+        case "set_watch_settings":
+          watch = { enabled: Boolean(args.enabled), minutes: Math.min(1440, Math.max(5, Number(args.minutes))) };
+          return watch;
+        case "notify":
+          notifications.push({ title: String(args.title), body: String(args.body) });
+          return null;
         case "github_pulls":
           return [{ number: 17, title: "Recolour the drift label", author: "emmanuelalozie", branch: "gitops/recolour-drift", sha: "abc1234def",
             base: "develop", draft: false, url: "https://github.com/emmanuelalozie/gitops/pull/17", updatedAt: new Date(Date.now() - 3_600_000).toISOString() }];

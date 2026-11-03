@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../lib/api";
-import { tokenNames } from "../lib/model";
+import { relativeTime, tokenNames } from "../lib/model";
 import type { AppError, EngineVersion, TokenStatus } from "../lib/types";
 import { ErrorBox, Tag } from "../components/ui";
 import { useRepo } from "../state";
 
 export function Settings() {
-  const { repo, targets, reload, planAll } = useRepo();
+  const { repo, targets, reload, planAll, watch, setWatch, lastWatch } = useRepo();
   const names = targets.state === "ok" ? tokenNames(targets.value) : ["GITHUB_TOKEN"];
   const [tokens, setTokens] = useState<TokenStatus[]>([]);
   const [engine, setEngine] = useState<EngineVersion | null>(null);
@@ -49,6 +49,26 @@ export function Settings() {
             <TokenRow key={t.name} token={t} onChanged={restart} onError={setError} />
           ))}
         </ul>
+      </section>
+      <section>
+        <h2>Watch for drift</h2>
+        <p className="muted">
+          While the app is open, plan every target on a schedule{repo.git.github ? " and check GitHub for new drift issues" : ""}, and show a
+          desktop notification when one drifts, fails, or is back in sync. Each plan reads the live systems.
+        </p>
+        <div className="watch-row">
+          <label className="check">
+            <input type="checkbox" checked={watch.enabled} onChange={(e) => void setWatch(e.target.checked, watch.minutes)} /> Watch
+          </label>
+          <label className="inline">
+            every
+            <select value={watch.minutes} onChange={(e) => void setWatch(watch.enabled, Number(e.target.value))}>
+              {[5, 15, 30, 60, 240, 1440].map((m) => <option key={m} value={m}>{m < 60 ? `${m} minutes` : m === 60 ? "hour" : m === 1440 ? "day" : `${m / 60} hours`}</option>)}
+            </select>
+          </label>
+          {watch.enabled && lastWatch && <span className="muted small">last looked {relativeTime(lastWatch)}</span>}
+        </div>
+        <p className="muted small">The daily Drift workflow can also post to Slack or a compatible chat: add a <code>DRIFT_WEBHOOK_URL</code> secret to the repository.</p>
       </section>
       <section>
         <h2>Engine</h2>

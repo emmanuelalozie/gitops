@@ -2,7 +2,7 @@
 // (npm run dev, or screenshots) they go to the demo backend in demo.ts, which serves the fixtures.
 
 import type {
-  AppError, AppInfo, ApplyResult, Commit, MockStatus, ConfigChange, DriftData, EngineVersion, Json, Lint, Plan, Problem, Proposal, ProposeResult,
+  AppError, AppInfo, ApplyResult, Commit, MockStatus, WatchSettings, ConfigChange, DriftData, EngineVersion, Json, Lint, Plan, Problem, Proposal, ProposeResult,
   PullDetails, PullRequest, RepoInfo, RepoStatus, Resource, ResourceEntry, RunsData, Target, TokenStatus, Validation,
 } from "./types";
 import { demo } from "./demo";
@@ -84,6 +84,9 @@ export const api = {
   history: (path: string, limit = 100) => call<Commit[]>("file_history", { path, limit }),
   commitDiff: (sha: string, path: string) => call<string>("commit_diff", { sha, path }),
   propose: (proposal: Proposal) => call<ProposeResult>("propose", { proposal }),
+  watchSettings: () => call<WatchSettings>("watch_settings"),
+  setWatchSettings: (enabled: boolean, minutes: number) => call<WatchSettings>("set_watch_settings", { enabled, minutes }),
+  notify: (title: string, body: string) => call<void>("notify", { title, body }),
   pulls: () => call<PullRequest[]>("github_pulls"),
   pullDetails: (number: number, sha: string) => call<PullDetails>("github_pull_details", { number, sha }),
   drift: (workflow = "drift.yml", limit = 21) => call<DriftData>("github_drift", { workflow, limit }),

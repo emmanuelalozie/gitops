@@ -3,7 +3,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, asAppError } from "./lib/api";
 import { affectedTargets, type Load } from "./lib/model";
-import type { Lint, Plan, RepoInfo, Target, Validation } from "./lib/types";
+import type { DriftIssue, Lint, Plan, RepoInfo, Target, Validation, WatchSettings } from "./lib/types";
+import { alerts, snapshot, type Snapshot } from "./lib/watch";
 
 export type Page =
   | { name: "overview" }
@@ -26,7 +27,7 @@ interface RepoState {
   changeCount: number;
   page: Page;
   go: (page: Page) => void;
-  planTarget: (name: string) => Promise<void>;
+  planTarget: (name: string) => Promise<Load<Plan>>;
   planAll: () => void;
   reload: () => Promise<void>;
   setRepo: (repo: RepoInfo) => void;
@@ -36,6 +37,11 @@ interface RepoState {
   /** A pull request being prepared elsewhere (a promotion), which the Changes page starts from. */
   draft: Draft | null;
   setDraft: (draft: Draft | null) => void;
+  /** Re-plan on a schedule and notify on drift (Settings). */
+  watch: WatchSettings;
+  setWatch: (enabled: boolean, minutes: number) => Promise<void>;
+  /** When the watch last looked, if it has. */
+  lastWatch: number | null;
 }
 
 export interface Draft {
@@ -73,10 +79,11 @@ export function RepoProvider({ initial, onClose, children }: { initial: RepoInfo
   const [revision, setRevision] = useState(0);
   const targetsRef = useRef<Target[]>([]);
 
-  const planTarget = useCallback(async (name: string) => {
+  const planTarget = useCallback(async (name: string): Promise<Load<Plan>> => {
     setPlans((p) => ({ ...p, [name]: { state: "loading", previous: p[name]?.state === "ok" ? p[name].value : undefined } }));
     const result = await load(api.plan(name));
     setPlans((p) => ({ ...p, [name]: result }));
+    return result;
   }, []);
 
   const planAll = useCallback(() => {
@@ -109,9 +116,43 @@ export function RepoProvider({ initial, onClose, children }: { initial: RepoInfo
     return () => void off.then((f) => f());
   }, [reload, planTarget]);
 
+  // The drift watch: on a schedule, plan every target and look at GitHub's drift issues, and notify about what
+  // got worse (or recovered) since the last look. Runs while the app is open.
+  const [watch, setWatchState] = useState<WatchSettings>({ enabled: false, minutes: 30 });
+  const [lastWatch, setLastWatch] = useState<number | null>(null);
+  const lastLook = useRef<Snapshot | null>(null);
+  const hasGitHub = Boolean(repo.git.github);
+  useEffect(() => {
+    void api.watchSettings().then(setWatchState).catch(() => undefined);
+  }, []);
+  const setWatch = useCallback(async (enabled: boolean, minutes: number) => {
+    setWatchState(await api.setWatchSettings(enabled, minutes));
+  }, []);
+  const targetsReady = targets.state === "ok";
+  useEffect(() => {
+    lastLook.current = null;
+    if (!watch.enabled || !targetsReady) return;
+    let cancelled = false;
+    const look = async () => {
+      const names = targetsRef.current.map((t) => t.name);
+      const results: Record<string, Load<Plan>> = Object.fromEntries(await Promise.all(names.map(async (n) => [n, await planTarget(n)] as const)));
+      const issues: DriftIssue[] | null = hasGitHub ? await api.drift("drift.yml", 1).then((d) => d.issues, () => null) : null;
+      if (cancelled) return;
+      for (const alert of alerts(lastLook.current, results, issues)) void api.notify(alert.title, alert.body).catch(() => undefined);
+      lastLook.current = snapshot(results, issues);
+      setLastWatch(Date.now());
+    };
+    void look();
+    const timer = setInterval(() => void look(), watch.minutes * 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [watch.enabled, watch.minutes, targetsReady, hasGitHub, planTarget]);
+
   const value = useMemo<RepoState>(
-    () => ({ repo, targets, plans, validation, lint, changeCount, page, go: setPage, planTarget, planAll, reload, setRepo, close: onClose, revision, draft, setDraft }),
-    [repo, targets, plans, validation, lint, changeCount, page, planTarget, planAll, reload, onClose, revision, draft],
+    () => ({ repo, targets, plans, validation, lint, changeCount, page, go: setPage, planTarget, planAll, reload, setRepo, close: onClose, revision, draft, setDraft, watch, setWatch, lastWatch }),
+    [repo, targets, plans, validation, lint, changeCount, page, planTarget, planAll, reload, onClose, revision, draft, watch, setWatch, lastWatch],
   );
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
