@@ -47,6 +47,37 @@ public final class ConfigStore {
         return files().stream().map(Json::readObject).toList();
     }
 
+    /** The file a resource with this key lives in. */
+    public Path file(String key) {
+        return dir.resolve(fileName(key));
+    }
+
+    /** Writes one resource, keeping only schema fields in schema order. Returns its file. */
+    public Path write(ObjectNode resource) {
+        Path file = file(resource.path(kind.keyField()).asText());
+        Json.write(file, managed(resource));
+        return file;
+    }
+
+    /** Removes the file of the resource with this key. Returns whether there was one. */
+    public boolean remove(String key) {
+        try {
+            return Files.deleteIfExists(file(key));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    private ObjectNode managed(ObjectNode resource) {
+        ObjectNode managed = Json.MAPPER.createObjectNode();
+        for (String field : kind.fields()) {
+            if (resource.hasNonNull(field)) {
+                managed.set(field, resource.get(field));
+            }
+        }
+        return managed;
+    }
+
     /** Writes exactly these resources, keeping only schema fields, and removes files for anything else. */
     public void replaceAll(List<ObjectNode> resources) {
         Set<Path> written = new HashSet<>();
@@ -59,13 +90,7 @@ public final class ConfigStore {
             }
         }
         for (ObjectNode resource : resources) {
-            ObjectNode managed = Json.MAPPER.createObjectNode();
-            for (String field : kind.fields()) {
-                if (resource.hasNonNull(field)) {
-                    managed.set(field, resource.get(field));
-                }
-            }
-            Json.write(dir.resolve(fileName(resource.path(kind.keyField()).asText())), managed);
+            write(resource);
         }
         for (Path file : files()) {
             if (!written.contains(file)) {

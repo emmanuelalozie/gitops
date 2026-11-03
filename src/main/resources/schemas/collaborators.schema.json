@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Repository collaborator",
+  "description": "A person with direct access to the repository. One file per login in config/<target>/collaborators/. Someone not yet accepted is a pending invitation, which counts as there.",
+  "type": "object",
+  "properties": {
+    "login": { "type": "string", "pattern": "^[A-Za-z0-9-]+$" },
+    "permission": { "enum": ["read", "triage", "write", "maintain", "admin"] }
+  },
+  "required": ["login", "permission"],
+  "additionalProperties": false
+}

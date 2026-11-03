@@ -60,5 +60,35 @@
       "email": "Telly.Hoeger@billy.biz",
       "phone": "210.067.6132"
     }
+  ],
+  "items": [
+    {
+      "id": 1,
+      "sku": "WID-001",
+      "name": "Widget",
+      "quantity": 118,
+      "location": "A1"
+    },
+    {
+      "id": 2,
+      "sku": "GAD-002",
+      "name": "Gadget",
+      "quantity": 45,
+      "location": "B4"
+    },
+    {
+      "id": 4,
+      "sku": "BOL-004",
+      "name": "Bolt pack (100)",
+      "quantity": 1000,
+      "location": "C4"
+    },
+    {
+      "id": 9,
+      "sku": "OLD-999",
+      "name": "Discontinued gizmo",
+      "quantity": 3,
+      "location": "Z9"
+    }
   ]
 }

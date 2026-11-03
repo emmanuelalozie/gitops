@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Repository team",
+  "description": "A team of the organization with access to the repository. One file per team slug in config/<target>/teams/.",
+  "type": "object",
+  "properties": {
+    "slug": { "type": "string", "pattern": "^[a-z0-9._-]+$" },
+    "permission": { "enum": ["read", "triage", "write", "maintain", "admin"] }
+  },
+  "required": ["slug", "permission"],
+  "additionalProperties": false
+}

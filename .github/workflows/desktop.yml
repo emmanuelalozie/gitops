@@ -1,0 +1,115 @@
+name: Desktop app
+
+# The Tauri app in desktop/ and the engine it runs. On every change to either: build the engine bundle, then
+# typecheck and test the frontend and test the Rust side (which also drives the real engine). Installers for
+# Linux, macOS and Windows are built only when this workflow is started by hand.
+on:
+  pull_request:
+    paths:
+      - 'desktop/**'
+      - 'src/**'
+      - 'build.gradle'
+      - '.github/workflows/desktop.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'desktop/**'
+      - 'src/**'
+      - 'build.gradle'
+      - '.github/workflows/desktop.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    # On all three platforms: dependencies differ per OS (keychain, webview), so code that compiles on Linux
+    # can still fail on Windows or macOS.
+    name: Desktop app tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: System libraries for Tauri
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libdbus-1-dev
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+      - name: Build the engine bundle
+        shell: bash
+        run: ./gradlew engineBundle
+      - name: Install
+        working-directory: desktop
+        run: npm ci
+      - name: Typecheck and test the frontend
+        if: runner.os == 'Linux'
+        working-directory: desktop
+        run: |
+          npm run typecheck
+          npm test
+      - name: Test the Rust side
+        working-directory: desktop/src-tauri
+        run: cargo test --locked
+
+  bundle:
+    name: Installer (${{ matrix.os }})
+    if: github.event_name == 'workflow_dispatch'
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: System libraries for Tauri
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libdbus-1-dev
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+      - name: Build the installer (the engine bundle is built first, by beforeBuildCommand)
+        working-directory: desktop
+        run: |
+          npm ci
+          npm run tauri build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: gitops-desktop-${{ runner.os }}
+          path: |
+            desktop/src-tauri/target/release/bundle/**/*.deb
+            desktop/src-tauri/target/release/bundle/**/*.AppImage
+            desktop/src-tauri/target/release/bundle/**/*.rpm
+            desktop/src-tauri/target/release/bundle/**/*.dmg
+            desktop/src-tauri/target/release/bundle/**/*.msi
+            desktop/src-tauri/target/release/bundle/**/*.exe
+          if-no-files-found: error

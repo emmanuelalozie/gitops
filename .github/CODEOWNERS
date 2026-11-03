@@ -1,1 +1,7 @@
 * @emmanuelalozie
+
+# BEGIN gitops: generated from "owners" in config/*/target.json; change them there and run ./gradlew codeowners
+/config/github-branches/ @emmanuelalozie
+/config/github-repo/ @emmanuelalozie
+/config/prod/ @emmanuelalozie
+# END gitops

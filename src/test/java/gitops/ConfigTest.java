@@ -100,4 +100,52 @@ class ConfigTest {
         assertThat(ConfigValidator.validate(Target.load(root, "x")))
                 .anyMatch(e -> e.contains("must set \"repository\""));
     }
+
+    private void restTarget(String settings) throws Exception {
+        Files.createDirectories(root.resolve("inv/items"));
+        Files.writeString(root.resolve("inv/items.schema.json"), """
+                {"type": "object", "properties": {"id": {"type": "integer"}, "sku": {"type": "string"}},
+                 "required": ["id", "sku"], "additionalProperties": false}""");
+        Files.writeString(root.resolve("inv/target.json"), settings);
+    }
+
+    @Test
+    void restTargetsDefineTheirKindFromTargetJson() throws Exception {
+        restTarget("""
+                {"kind": "rest", "resource": "items", "key": "sku", "baseUrl": "http://localhost:3000"}""");
+        Target target = Target.load(root, "inv");
+
+        assertThat(target.kind().id()).isEqualTo("items");
+        assertThat(target.kind().keyField()).isEqualTo("sku");
+        assertThat(target.kind().fields()).containsExactly("id", "sku");
+        assertThat(target.resourceDir()).isEqualTo(root.resolve("inv/items"));
+        assertThat(target.toJson().path("type").asText()).isEqualTo("rest");
+        // A rest API never gets GITHUB_TOKEN by default: only a token it names in tokenEnv.
+        assertThat(target.tokenVariable()).isNull();
+        assertThat(target.provider()).isInstanceOf(gitops.providers.RestProvider.class);
+
+        Json.write(root.resolve("inv/items/wid-001.json"), Json.MAPPER.createObjectNode().put("id", 1).put("sku", "WID-001"));
+        Json.write(root.resolve("inv/items/bad.json"), Json.MAPPER.createObjectNode().put("sku", "BAD").put("extra", true));
+        assertThat(ConfigValidator.validate(target)).anySatisfy(p -> assertThat(p).contains("bad.json").contains("id"));
+    }
+
+    @Test
+    void restTargetsExplainWhatIsMissing() throws Exception {
+        restTarget("{\"kind\": \"rest\", \"baseUrl\": \"http://x\"}");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> Target.load(root, "inv")).hasMessageContaining("\"resource\"");
+
+        restTarget("{\"kind\": \"rest\", \"resource\": \"items\", \"schema\": \"../../secret.json\", \"baseUrl\": \"http://x\"}");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> Target.load(root, "inv")).hasMessageContaining("inside");
+
+        restTarget("{\"kind\": \"rest\", \"resource\": \"things\", \"baseUrl\": \"http://x\"}");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> Target.load(root, "inv")).hasMessageContaining("things.schema.json");
+    }
+
+    @Test
+    void aRequiredTokenNeedsAName() throws Exception {
+        restTarget("""
+                {"kind": "rest", "resource": "items", "key": "sku", "baseUrl": "http://x", "tokenRequired": true}""");
+
+        assertThat(ConfigValidator.validate(Target.load(root, "inv"))).anySatisfy(p -> assertThat(p).contains("tokenEnv"));
+    }
 }

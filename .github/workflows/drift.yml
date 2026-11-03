@@ -12,17 +12,39 @@ permissions:
   issues: write
 
 jobs:
+  targets:
+    # Every target with "workflows" on (the default) in its target.json, so a new target is checked without
+    # editing this file. The dev mock sets it off: it only exists inside CI.
+    name: List targets
+    runs-on: ubuntu-latest
+    outputs:
+      list: ${{ steps.list.outputs.list }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6
+      - id: list
+        run: |
+          ./gradlew -q targets -Pargs="--format json --out targets.json" > /dev/null
+          echo "list=$(jq -c '[.targets[] | select(.workflows) | .name]' targets.json)" >> "$GITHUB_OUTPUT"
+
   drift:
     name: Drift in ${{ matrix.target }}
+    needs: targets
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        target: [prod, github, github-repo, github-branches]
+        target: ${{ fromJSON(needs.targets.outputs.list) }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GITOPS_ADMIN_TOKEN: ${{ secrets.GITOPS_ADMIN_TOKEN }}
+      # Optional: a Slack-compatible incoming webhook ({"text": ...}) told when a drift issue opens or closes.
+      DRIFT_WEBHOOK_URL: ${{ secrets.DRIFT_WEBHOOK_URL }}
       TITLE: Drift detected in ${{ matrix.target }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
@@ -35,9 +57,10 @@ jobs:
       - name: Plan
         id: plan
         run: |
-          ./gradlew -q plan -Ptarget=${{ matrix.target }} -Pargs="--format markdown --out plan.md --skip-without-token"
+          ./gradlew -q plan -Ptarget=${{ matrix.target }} -Pargs="--format markdown --out plan.md --json-out plan.json --skip-without-token"
           cat plan.md >> "$GITHUB_STEP_SUMMARY"
-          if grep -qE "No changes|Skipped" plan.md; then echo "drift=false"; else echo "drift=true"; fi >> "$GITHUB_OUTPUT"
+          # The JSON plan decides, not the wording of the Markdown. A skipped target has no changes.
+          echo "drift=$(jq -r '.hasChanges' plan.json)" >> "$GITHUB_OUTPUT"
       - name: Find the open drift issue
         id: issue
         run: |
@@ -54,10 +77,22 @@ jobs:
             # The drift label is managed in config/github/labels; only create it, from that file, if it's missing.
             label=config/github/labels/drift.json
             gh label create drift --color "$(jq -r .color "$label")" --description "$(jq -r .description "$label")" 2>/dev/null || true
-            gh issue create --title "$TITLE" --label drift --body-file body.md
+            url=$(gh issue create --title "$TITLE" --label drift --body-file body.md)
+            # Only a new issue is announced; while it stays open, the daily comments on it are the record.
+            if [ -n "$DRIFT_WEBHOOK_URL" ]; then
+              text="Drift detected in ${{ matrix.target }}: $(jq -r '"\(.summary.create) to create, \(.summary.update) to update, \(.summary.delete) to delete"' plan.json). $url"
+              jq -n --arg text "$text" '{text: $text}' | curl -fsS -X POST -H 'Content-Type: application/json' --data @- "$DRIFT_WEBHOOK_URL" > /dev/null \
+                || echo "::warning::Couldn't post to DRIFT_WEBHOOK_URL"
+            fi
           fi
           echo "::error::Live state of ${{ matrix.target }} has drifted from Git"
           exit 1
       - name: Close the drift issue
         if: steps.plan.outputs.drift == 'false' && steps.issue.outputs.number != ''
-        run: gh issue close "${{ steps.issue.outputs.number }}" --comment "No drift as of $RUN_URL."
+        run: |
+          gh issue close "${{ steps.issue.outputs.number }}" --comment "No drift as of $RUN_URL."
+          if [ -n "$DRIFT_WEBHOOK_URL" ]; then
+            jq -n --arg text "${{ matrix.target }} is back in sync with Git (closed drift issue #${{ steps.issue.outputs.number }})." '{text: $text}' \
+              | curl -fsS -X POST -H 'Content-Type: application/json' --data @- "$DRIFT_WEBHOOK_URL" > /dev/null \
+              || echo "::warning::Couldn't post to DRIFT_WEBHOOK_URL"
+          fi

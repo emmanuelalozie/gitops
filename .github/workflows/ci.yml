@@ -55,3 +55,8 @@ jobs:
         run: ./gradlew applyConfig -Ptarget=dev
       - name: Fail if any drift remains
         run: ./gradlew detectDrift -Ptarget=dev
+      - name: Plan, apply and verify the inventory items (a rest target on the same mock)
+        run: |
+          ./gradlew plan -Ptarget=dev-inventory
+          ./gradlew applyConfig -Ptarget=dev-inventory
+          ./gradlew detectDrift -Ptarget=dev-inventory

@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "target": "dev",
+  "description": "users @ http://127.0.0.1:3000",
+  "kind": "users",
+  "type": "users",
+  "keyField": "username",
+  "skipped": false,
+  "planId": "8f9fd60b75ee9d255d9848050edfa8a925eca649449a44e79207e02c5fa68bb2",
+  "hasChanges": true,
+  "summary": {
+    "create": 1,
+    "update": 2,
+    "delete": 1
+  },
+  "changes": [ {
+    "action": "update",
+    "key": "Bret",
+    "replace": false,
+    "desired": {
+      "id": 1,
+      "username": "Bret",
+      "email": "new@b.io",
+      "phone": "555-0100"
+    },
+    "live": {
+      "id": 1,
+      "username": "Bret",
+      "email": "old@b.io",
+      "phone": "555-0100"
+    },
+    "diffs": [ {
+      "field": "email",
+      "live": "old@b.io",
+      "liveMissing": false,
+      "desired": "new@b.io"
+    } ]
+  }, {
+    "action": "update",
+    "key": "Elwyn.Skiles",
+    "replace": true,
+    "desired": {
+      "id": 7,
+      "username": "Elwyn.Skiles",
+      "email": "e@b.io",
+      "phone": "555-0100"
+    },
+    "live": {
+      "id": 72,
+      "username": "Elwyn.Skiles",
+      "email": "e@b.io",
+      "phone": "555-0100"
+    },
+    "diffs": [ {
+      "field": "id",
+      "live": 72,
+      "liveMissing": false,
+      "desired": 7
+    } ]
+  }, {
+    "action": "create",
+    "key": "Moriah.Stanton",
+    "replace": false,
+    "desired": {
+      "id": 5,
+      "username": "Moriah.Stanton",
+      "email": "m@b.io",
+      "phone": "555-0100"
+    },
+    "live": null,
+    "diffs": [ ]
+  }, {
+    "action": "delete",
+    "key": "Moriah.Stantonite",
+    "replace": false,
+    "desired": null,
+    "live": {
+      "id": 5,
+      "username": "Moriah.Stantonite",
+      "email": "m@b.io",
+      "phone": "555-0100"
+    },
+    "diffs": [ ]
+  } ],
+  "unmanaged": [ ]
+}

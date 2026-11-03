@@ -1,0 +1,10 @@
+{
+  "code": "api",
+  "message": "PATCH http://127.0.0.1:3000/users/1 failed with HTTP 500: boom",
+  "details": {
+    "method": "PATCH",
+    "url": "http://127.0.0.1:3000/users/1",
+    "status": 500,
+    "body": "boom"
+  }
+}

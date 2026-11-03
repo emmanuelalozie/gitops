@@ -1,0 +1,19 @@
+{
+  "description": "Inventory items in the dev mock API (mock/db.json, /items): a rest target, so any JSON API that lists, creates, updates and deletes a collection can be managed the same way.",
+  "kind": "rest",
+  "resource": "items",
+  "key": "sku",
+  "idField": "id",
+  "baseUrl": "http://127.0.0.1:3000",
+  "path": "/items",
+  "prune": true,
+  "verifyAfterApply": true,
+  "localApply": true,
+  "workflows": false,
+  "mock": "mock/db.json",
+  "healthCheck": {
+    "url": "{baseUrl}/items",
+    "contains": "WID-001",
+    "timeoutSeconds": 30
+  }
+}

@@ -5,10 +5,10 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import gitops.Json;
 import gitops.Plan.FieldDiff;
-import io.restassured.http.Method;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Branch protection rules. GitHub's nested API shape is flattened to one object per branch, so a rule
@@ -23,10 +23,10 @@ public final class GitHubBranchProtectionProvider extends GitHubProvider {
     @Override
     public List<ObjectNode> list() {
         List<ObjectNode> rules = new ArrayList<>();
-        for (ObjectNode branch : listAll("/branches?protected=true")) {
+        for (ObjectNode branch : listAll("/branches", Map.of("protected", "true"))) {
             String name = branch.path("name").asText();
-            JsonNode live = Json.parse(http.send(Method.GET, "/repos/{owner}/{repo}/branches/{branch}/protection",
-                    null, owner, repo, name).asString());
+            JsonNode live = Json.parse(http.send(Http.Method.GET, "/repos/{owner}/{repo}/branches/{branch}/protection",
+                    null, owner, repo, name).body());
             rules.add(flatten(name, live));
         }
         return rules;
@@ -45,12 +45,12 @@ public final class GitHubBranchProtectionProvider extends GitHubProvider {
 
     @Override
     public void delete(ObjectNode live) {
-        http.send(Method.DELETE, "/repos/{owner}/{repo}/branches/{branch}/protection", null,
+        http.send(Http.Method.DELETE, "/repos/{owner}/{repo}/branches/{branch}/protection", null,
                 owner, repo, live.path("branch").asText());
     }
 
     private void put(ObjectNode desired) {
-        http.send(Method.PUT, "/repos/{owner}/{repo}/branches/{branch}/protection", expand(desired),
+        http.send(Http.Method.PUT, "/repos/{owner}/{repo}/branches/{branch}/protection", expand(desired),
                 owner, repo, desired.path("branch").asText());
     }
 

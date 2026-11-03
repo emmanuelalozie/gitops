@@ -3,5 +3,8 @@
   "kind": "users",
   "baseUrl": "http://127.0.0.1:3000",
   "prune": true,
-  "verifyAfterApply": true
+  "verifyAfterApply": true,
+  "localApply": true,
+  "workflows": false,
+  "mock": "mock/db.json"
 }

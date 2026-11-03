@@ -3,7 +3,6 @@ package gitops.providers;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import gitops.Json;
 import gitops.Plan.FieldDiff;
-import io.restassured.http.Method;
 
 import java.util.List;
 
@@ -23,7 +22,7 @@ public final class GitHubRepositoryProvider extends GitHubProvider {
 
     @Override
     public List<ObjectNode> list() {
-        ObjectNode live = (ObjectNode) Json.parse(http.send(Method.GET, "/repos/{owner}/{repo}", null, owner, repo).asString());
+        ObjectNode live = (ObjectNode) Json.parse(http.send(Http.Method.GET, "/repos/{owner}/{repo}", null, owner, repo).body());
         ObjectNode settings = Json.MAPPER.createObjectNode();
         for (String field : FIELDS) {
             settings.set(field, live.get(field));
@@ -48,10 +47,10 @@ public final class GitHubRepositoryProvider extends GitHubProvider {
         ObjectNode patch = desired.objectNode();
         diffs.stream().filter(d -> !d.field().equals("topics")).forEach(d -> patch.set(d.field(), d.desired()));
         if (!patch.isEmpty()) {
-            http.send(Method.PATCH, "/repos/{owner}/{repo}", patch, owner, repo);
+            http.send(Http.Method.PATCH, "/repos/{owner}/{repo}", patch, owner, repo);
         }
         if (diffs.stream().anyMatch(d -> d.field().equals("topics"))) {
-            http.send(Method.PUT, "/repos/{owner}/{repo}/topics", desired.objectNode().set("names", desired.get("topics")), owner, repo);
+            http.send(Http.Method.PUT, "/repos/{owner}/{repo}/topics", desired.objectNode().set("names", desired.get("topics")), owner, repo);
         }
     }
 

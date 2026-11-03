@@ -1,10 +1,10 @@
 package gitops.providers;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.restassured.http.Method;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -35,15 +35,55 @@ abstract class GitHubProvider implements Provider {
 
     /** Every item of a paginated list endpoint under /repos/{owner}/{repo}. */
     List<ObjectNode> listAll(String path) {
+        return listAll(path, Map.of());
+    }
+
+    List<ObjectNode> listAll(String path, Map<String, ?> query) {
         List<ObjectNode> items = new ArrayList<>();
         for (int page = 1; ; page++) {
-            List<ObjectNode> batch = Http.objects(http.send(
-                    http.spec().queryParam("per_page", PAGE_SIZE).queryParam("page", page),
-                    Method.GET, "/repos/{owner}/{repo}" + path, null, owner, repo));
+            Map<String, Object> pageQuery = new LinkedHashMap<>(query);
+            pageQuery.put("per_page", PAGE_SIZE);
+            pageQuery.put("page", page);
+            List<ObjectNode> batch = Http.objects(http.send(Http.Method.GET, "/repos/{owner}/{repo}" + path,
+                    pageQuery, null, owner, repo));
             items.addAll(batch);
             if (batch.size() < PAGE_SIZE) {
                 return items;
             }
         }
+    }
+
+    /** Every item of a paginated endpoint that wraps its list in an object, such as {"environments": [...]}. */
+    List<ObjectNode> listAllIn(String path, String field, int pageSize) {
+        List<ObjectNode> items = new ArrayList<>();
+        for (int page = 1; ; page++) {
+            Map<String, Object> query = new LinkedHashMap<>();
+            query.put("per_page", pageSize);
+            query.put("page", page);
+            com.fasterxml.jackson.databind.JsonNode batch = http.send(Http.Method.GET, "/repos/{owner}/{repo}" + path, query, null, owner, repo)
+                    .json().path(field);
+            batch.forEach(n -> items.add((ObjectNode) n));
+            if (batch.size() < pageSize) {
+                return items;
+            }
+        }
+    }
+
+    /** GitHub's permission names in the API, from the role names people see (read, triage, write, maintain, admin). */
+    static String apiPermission(String role) {
+        return switch (role) {
+            case "read" -> "pull";
+            case "write" -> "push";
+            default -> role;
+        };
+    }
+
+    /** The role name for a permission as the API reports it. */
+    static String roleName(String permission) {
+        return switch (permission) {
+            case "pull" -> "read";
+            case "push" -> "write";
+            default -> permission;
+        };
     }
 }
