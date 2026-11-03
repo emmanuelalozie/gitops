@@ -1,0 +1,31 @@
+{
+  "rules": [
+    {
+      "id": "no-force-push",
+      "kinds": [
+        "branch-protection"
+      ],
+      "field": "allow_force_pushes",
+      "equals": false,
+      "message": "Force pushes rewrite history that others have already pulled."
+    },
+    {
+      "id": "no-branch-deletion",
+      "kinds": [
+        "branch-protection"
+      ],
+      "field": "allow_deletions",
+      "equals": false,
+      "message": "A protected branch shouldn't be deletable."
+    },
+    {
+      "id": "inventory-aisles",
+      "targets": [
+        "dev-inventory"
+      ],
+      "field": "location",
+      "pattern": "^[A-C][0-9]+$",
+      "message": "Stock lives in aisles A to C; aisle Z is for discontinued items, which should be removed instead."
+    }
+  ]
+}

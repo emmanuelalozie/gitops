@@ -98,6 +98,8 @@ gitopsTask('snapshot', 'Writes the live state of the target into Git.', ['snapsh
 gitopsTask('fetch', 'Prints the live state of the target.', ['fetch'] + targetArgs)
 gitopsTask('targets', 'Lists the targets and their settings.', ['targets'])
 gitopsTask('lint', 'Checks across files, such as required status checks that no workflow job reports.', ['lint'])
+gitopsTask('codeowners', 'Writes the owners in target.json files into .github/CODEOWNERS.', ['codeowners'])
+gitopsTask('search', 'Finds resources in Git across every target: -Pargs="--query TEXT".', ['search'])
 
 // ---------------------------------------------------------------------------
 // The engine for the desktop app (desktop/): the jars plus a Java runtime trimmed with jlink, so people

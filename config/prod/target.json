@@ -3,5 +3,8 @@
   "kind": "users",
   "baseUrl": "https://jsonplaceholder.typicode.com",
   "prune": true,
-  "verifyAfterApply": false
+  "verifyAfterApply": false,
+  "owners": [
+    "@emmanuelalozie"
+  ]
 }

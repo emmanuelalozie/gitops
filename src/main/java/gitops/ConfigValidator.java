@@ -66,6 +66,20 @@ public final class ConfigValidator {
                     + " sets \"tokenRequired\" but not \"tokenEnv\": name the environment variable that holds the token"));
         }
 
+        for (Runnable check : List.<Runnable>of(() -> ApplyWindow.of(target), () -> HealthCheck.spec(target))) {
+            try {
+                check.run();
+            } catch (IllegalArgumentException e) {
+                problems.add(new Problem(null, "", e.getMessage()));
+            }
+        }
+        for (String owner : CodeOwners.owners(target)) {
+            if (!CodeOwners.OWNER.matcher(owner).matches()) {
+                problems.add(new Problem(null, "", target.dir().resolve(Target.FILE) + ": owner '" + owner
+                        + "' must be a GitHub user or team such as @alice or @org/platform"));
+            }
+        }
+
         if (!Files.isDirectory(target.resourceDir())) {
             problems.add(new Problem(null, "", target.resourceDir()
                     + " does not exist. An empty target would delete everything live, so create the folder on purpose."));
@@ -105,6 +119,7 @@ public final class ConfigValidator {
                 }
             }
         }
+        problems.addAll(Policies.check(target, target.dir().getParent()));
         return problems;
     }
 

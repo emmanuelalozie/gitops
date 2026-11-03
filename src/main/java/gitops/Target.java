@@ -1,6 +1,7 @@
 package gitops;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import gitops.providers.GitHubBranchProtectionProvider;
 import gitops.providers.GitHubLabelsProvider;
@@ -95,6 +96,12 @@ public record Target(String name, Path dir, Kind kind, boolean prune, boolean ve
         return settings.path("workflows").asBoolean(true);
     }
 
+    /** The GitHub environment the Apply workflow uses for this target (its reviewers approve the apply). */
+    public String environment() {
+        String environment = settings.path("environment").asText("");
+        return environment.isBlank() ? "production" : environment;
+    }
+
     public String description() {
         return settings.path("description").asText("");
     }
@@ -125,6 +132,25 @@ public record Target(String name, Path dir, Kind kind, boolean prune, boolean ve
         node.put("prune", prune);
         node.put("verifyAfterApply", verifyAfterApply);
         node.put("localApply", localApply());
+        node.put("environment", environment());
+        ArrayNode owners = node.putArray("owners");
+        CodeOwners.owners(this).forEach(owners::add);
+        try {
+            ApplyWindow window = ApplyWindow.of(this);
+            node.set("applyWindow", window == null ? Json.MAPPER.nullNode() : window.toJson(java.time.Instant.now()));
+        } catch (IllegalArgumentException e) {
+            node.putNull("applyWindow");
+        }
+        try {
+            JsonNode health = HealthCheck.spec(this);
+            if (health == null) {
+                node.putNull("healthCheck");
+            } else {
+                node.put("healthCheck", HealthCheck.url(this, health));
+            }
+        } catch (IllegalArgumentException e) {
+            node.putNull("healthCheck");
+        }
         String mock = settings.path("mock").asText("");
         if (mock.isBlank()) {
             node.putNull("mock");
@@ -194,8 +220,7 @@ public record Target(String name, Path dir, Kind kind, boolean prune, boolean ve
     public Provider provider() {
         String github = envOr("GITHUB_API_URL", "https://api.github.com");
         if (kind.family() == Kind.Family.REST) {
-            return new RestProvider(endpoint(), settings.path("path").asText("/" + kind.id()),
-                    settings.path("idField").asText("id"), settings.path("updateMethod").asText("PATCH"), token());
+            return new RestProvider(endpoint(), settings.path("path").asText("/" + kind.id()), restOptions(), token());
         }
         if (kind.equals(Kind.USERS)) {
             return new UsersProvider(endpoint());
@@ -213,6 +238,19 @@ public record Target(String name, Path dir, Kind kind, boolean prune, boolean ve
             return new GitHubActionsVariablesProvider(github, endpoint(), token());
         }
         throw new IllegalStateException("No provider for kind " + kind);
+    }
+
+    /** The optional settings of a rest target: how its API lists, pages and authenticates. */
+    RestProvider.Options restOptions() {
+        java.util.Map<String, String> headers = new java.util.LinkedHashMap<>();
+        settings.path("headers").properties().forEach(e -> headers.put(e.getKey(), e.getValue().asText()));
+        JsonNode paging = settings.get("pagination");
+        RestProvider.Pagination pagination = paging == null || paging.isNull() ? null : new RestProvider.Pagination(
+                paging.path("pageParam").asText("page"), paging.path("sizeParam").asText("per_page"),
+                Math.max(1, paging.path("size").asInt(100)), paging.path("first").asInt(1));
+        return new RestProvider.Options(settings.path("idField").asText("id"), settings.path("updateMethod").asText("PATCH"),
+                settings.path("listField").asText(""), headers, settings.path("tokenHeader").asText("Authorization"),
+                settings.path("tokenPrefix").asText("Bearer "), pagination);
     }
 
     public String describe() {

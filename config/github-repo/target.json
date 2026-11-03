@@ -5,5 +5,8 @@
   "prune": false,
   "verifyAfterApply": true,
   "tokenEnv": "GITOPS_ADMIN_TOKEN",
-  "tokenRequired": true
+  "tokenRequired": true,
+  "owners": [
+    "@emmanuelalozie"
+  ]
 }

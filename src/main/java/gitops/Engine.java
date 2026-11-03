@@ -104,8 +104,13 @@ public final class Engine {
         return Planner.plan(target);
     }
 
+    /** The plan as JSON, with each change's file in Git (where it is, or would be). */
     public ObjectNode planJson(Target target, Plan plan) {
-        return PlanJson.toJson(plan, target.kind(), target.provider());
+        ObjectNode json = PlanJson.toJson(plan, target.kind(), target.provider());
+        for (JsonNode change : json.path("changes")) {
+            ((ObjectNode) change).put("file", target.store().file(change.path("key").asText()).toString());
+        }
+        return json;
     }
 
     /**
@@ -114,7 +119,13 @@ public final class Engine {
      * @param after    the plan made after applying when verification ran, otherwise null
      * @param verified true when verification ran and found nothing left to change
      */
-    public record ApplyResult(Plan before, String planId, boolean applied, Plan after, boolean verified) {
+    public record ApplyResult(Plan before, String planId, boolean applied, Plan after, boolean verified, String deferred,
+                              ObjectNode health) {
+
+        /** Applied, verified when the target verifies, and healthy when it has a health check. */
+        public boolean ok() {
+            return deferred == null && (after == null || verified) && (health == null || health.path("ok").asBoolean());
+        }
     }
 
     /**
@@ -123,6 +134,15 @@ public final class Engine {
      */
     public ApplyResult apply(Target target, String expectedPlanId, boolean allowDeleteAll,
                              Consumer<Plan> onPlanned, Applier.Listener listener) {
+        return apply(target, expectedPlanId, allowDeleteAll, false, onPlanned, listener);
+    }
+
+    /**
+     * As above; with {@code respectWindow}, a target outside its apply window isn't changed and the result says
+     * when it opens. After applying (and verifying), the target's health check runs, if it has one.
+     */
+    public ApplyResult apply(Target target, String expectedPlanId, boolean allowDeleteAll, boolean respectWindow,
+                             Consumer<Plan> onPlanned, Applier.Listener listener) {
         Plan plan = plan(target);
         String planId = PlanJson.id(plan, target.kind());
         onPlanned.accept(plan);
@@ -130,7 +150,13 @@ public final class Engine {
             throw new EngineError.PlanChanged(target.name(), expectedPlanId, planId);
         }
         if (!plan.hasChanges()) {
-            return new ApplyResult(plan, planId, false, null, true);
+            return new ApplyResult(plan, planId, false, null, true, null, null);
+        }
+        ApplyWindow window = ApplyWindow.of(target);
+        java.time.Instant now = java.time.Instant.now();
+        if (respectWindow && window != null && !window.isOpen(now)) {
+            return new ApplyResult(plan, planId, false, null, false,
+                    "'" + target.name() + "' applies only " + window.describe() + "; the next window opens " + window.nextOpening(now) + ".", null);
         }
         if (plan.count(Action.DELETE) > 0 && plan.count(Action.DELETE) == plan.changes().size()
                 && target.store().files().isEmpty() && !allowDeleteAll) {
@@ -139,10 +165,11 @@ public final class Engine {
         }
         Applier.apply(plan, target.provider(), listener);
         if (!target.verifyAfterApply()) {
-            return new ApplyResult(plan, planId, true, null, false);
+            return new ApplyResult(plan, planId, true, null, false, null, HealthCheck.run(target));
         }
         Plan after = Planner.plan(target);
-        return new ApplyResult(plan, planId, true, after, !after.hasChanges());
+        boolean verified = !after.hasChanges();
+        return new ApplyResult(plan, planId, true, after, verified, null, verified ? HealthCheck.run(target) : null);
     }
 
     public ArrayNode fetch(Target target) {
@@ -311,6 +338,49 @@ public final class Engine {
         }
     }
 
+    /**
+     * Resources in Git across every target whose key or any value contains the text (case-insensitive), at most
+     * {@code limit}: {results: [{target, kind, key, file, fields}]} where fields are the ones that matched.
+     */
+    public ObjectNode search(String query, int limit) {
+        String needle = query.toLowerCase(java.util.Locale.ROOT).trim();
+        ObjectNode root = Json.MAPPER.createObjectNode().put("query", query);
+        ArrayNode results = root.putArray("results");
+        if (needle.isEmpty()) {
+            return root.put("truncated", false);
+        }
+        boolean truncated = false;
+        outer:
+        for (Target target : targets()) {
+            for (Path file : target.store().files()) {
+                JsonNode resource;
+                try {
+                    resource = Json.read(file);
+                } catch (IllegalArgumentException e) {
+                    continue;
+                }
+                ArrayNode fields = Json.MAPPER.createArrayNode();
+                resource.properties().forEach(e -> {
+                    String text = e.getValue().isTextual() ? e.getValue().asText() : e.getValue().toString();
+                    if (text.toLowerCase(java.util.Locale.ROOT).contains(needle)) {
+                        fields.add(e.getKey());
+                    }
+                });
+                if (!fields.isEmpty()) {
+                    if (results.size() >= limit) {
+                        truncated = true;
+                        break outer;
+                    }
+                    ObjectNode hit = results.addObject().put("target", target.name()).put("kind", target.kind().id())
+                            .put("key", resource.path(target.kind().keyField()).asText()).put("file", file.toString());
+                    hit.set("fields", fields);
+                    hit.set("resource", resource);
+                }
+            }
+        }
+        return root.put("truncated", truncated);
+    }
+
     /** The schema of a target's kind (a rest target has its own), or of a built-in kind by id. */
     public JsonNode schema(String targetName, String kindId) {
         return targetName != null ? target(targetName).kind().schema() : Kind.fromId(kindId).schema();
@@ -326,6 +396,7 @@ public final class Engine {
         String key = resource.path(kind.keyField()).asText("");
         Path file = key.isEmpty() ? store.dir().resolve("(new).json") : store.file(key);
         List<Problem> problems = new ArrayList<>(ConfigValidator.schemaProblems(kind, file, resource));
+        problems.addAll(Policies.checkResource(target, configRoot, file, resource));
         if (key.isEmpty()) {
             return problems;
         }

@@ -157,7 +157,13 @@ public final class EngineServer {
             case "targets.snapshot" -> locked(required(params, "target"), () -> engine.snapshot(engine.target(required(params, "target"))));
             case "rest.inferSchema" -> Json.MAPPER.createObjectNode().set("schema", Engine.inferSchema(
                     new gitops.providers.RestProvider(required(params, "baseUrl"), optional(params, "path") == null ? "/" : required(params, "path"),
-                            "id", "PATCH", null).list()));
+                            new gitops.providers.RestProvider.Options("id", "PATCH", params.path("listField").asText(""),
+                                    java.util.Map.of(), "Authorization", "Bearer ", null), null).list()));
+            case "resources.search" -> engine.search(required(params, "query"), params.path("limit").asInt(100));
+            case "health.check" -> {
+                ObjectNode health = HealthCheck.run(engine.target(required(params, "target")));
+                yield health == null ? Json.MAPPER.nullNode() : health;
+            }
             case "mock.status" -> mocks.status(engine.target(required(params, "target")));
             case "mock.start" -> mocks.start(engine.target(required(params, "target")));
             case "mock.stop" -> mocks.stop(engine.target(required(params, "target")));
@@ -194,7 +200,7 @@ public final class EngineServer {
         }
         engine.requireToken(target);
         return locked(target.name(), () -> {
-            Engine.ApplyResult result = engine.apply(target, planId, params.path("allowDeleteAll").asBoolean(false),
+            Engine.ApplyResult result = engine.apply(target, planId, params.path("allowDeleteAll").asBoolean(false), true,
                     plan -> { }, progress(id, target));
             ObjectNode node = Json.MAPPER.createObjectNode()
                     .put("schemaVersion", PlanJson.SCHEMA_VERSION)
@@ -204,6 +210,8 @@ public final class EngineServer {
                     .put("verified", result.verified())
                     .put("verifyAfterApply", target.verifyAfterApply());
             node.set("after", result.after() == null ? Json.MAPPER.nullNode() : engine.planJson(target, result.after()));
+            node.set("deferred", result.deferred() == null ? Json.MAPPER.nullNode() : Json.MAPPER.getNodeFactory().textNode(result.deferred()));
+            node.set("health", result.health() == null ? Json.MAPPER.nullNode() : result.health());
             return node;
         });
     }

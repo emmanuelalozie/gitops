@@ -26,7 +26,7 @@ public final class Main {
     static final int DRIFT = 2;
     static final int PLAN_CHANGED = 3;
 
-    private static final Set<String> FLAGS = Set.of("--fail-on-drift", "--allow-delete-all", "--skip-without-token");
+    private static final Set<String> FLAGS = Set.of("--fail-on-drift", "--allow-delete-all", "--skip-without-token", "--respect-window");
     private static final Set<String> FORMATS = Set.of("text", "markdown", "json");
     private static final String USAGE = """
             Usage: gitops <command> [options]
@@ -38,10 +38,13 @@ public final class Main {
                    [--format text|markdown|json] [--out FILE] [--json-out FILE]
               apply --target NAME [--allow-delete-all]      make the live system match Git
                     [--plan-id ID]                          only if the plan is still the one with this id
+                    [--respect-window]                      defer targets outside their applyWindow
             plan and apply also take --skip-without-token: succeed without doing anything when the
             target requires a token (tokenRequired in target.json) and its variable isn't set
               snapshot --target NAME                        write live state into Git
               fetch --target NAME                           print live state
+              search --query TEXT                           find resources in Git across every target
+              codeowners                                    write target owners into .github/CODEOWNERS
               version                                       print the engine and JSON schema versions
               serve                                         answer JSON-RPC on stdin/stdout (desktop app)
             Common: --config-dir DIR (default: config), --format json for machine-readable output and errors""";
@@ -83,6 +86,8 @@ public final class Main {
                 case "snapshot" -> snapshot(engine.target(options.get("--target")));
                 case "fetch" -> fetch(engine, engine.target(options.get("--target")));
                 case "version" -> version(format);
+                case "search" -> search(engine, options.get("--query"), format);
+                case "codeowners" -> codeowners(engine);
                 default -> throw new IllegalArgumentException("Unknown command '" + args[0] + "'\n" + USAGE);
             };
         } catch (Exception e) {
@@ -202,7 +207,7 @@ public final class Main {
         // With JSON output, stdout carries only the result; progress goes to stderr.
         PrintStream log = json ? err : out;
         Engine.ApplyResult result = engine.apply(target, options.get("--plan-id"), options.containsKey("--allow-delete-all"),
-                plan -> log.print(PlanRenderer.text(plan)), Applier.printing(log));
+                options.containsKey("--respect-window"), plan -> log.print(PlanRenderer.text(plan)), Applier.printing(log));
         if (json) {
             ObjectNode node = Json.MAPPER.createObjectNode()
                     .put("schemaVersion", PlanJson.SCHEMA_VERSION)
@@ -211,21 +216,35 @@ public final class Main {
                     .put("applied", result.applied())
                     .put("verified", result.verified());
             node.set("after", result.after() == null ? Json.MAPPER.nullNode() : engine.planJson(target, result.after()));
+            node.set("deferred", result.deferred() == null ? Json.MAPPER.nullNode() : Json.MAPPER.getNodeFactory().textNode(result.deferred()));
+            node.set("health", result.health() == null ? Json.MAPPER.nullNode() : result.health());
             out.println(node.toPrettyString());
+        }
+        if (result.deferred() != null) {
+            log.println("Deferred: " + result.deferred());
+            if ("true".equals(System.getenv("GITHUB_ACTIONS"))) {
+                log.println("::notice::Deferred: " + result.deferred());
+            }
+            return OK;
         }
         if (!result.applied()) {
             return OK;
         }
         if (result.after() == null) {
             log.println("Applied. Skipping verification (verifyAfterApply is false for '" + target.name() + "').");
-            return OK;
-        }
-        if (!result.verified()) {
+        } else if (!result.verified()) {
             err.println("Apply did not converge. Remaining drift:");
             err.print(PlanRenderer.text(result.after()));
             return ERROR;
+        } else {
+            log.println("Applied and verified: live state matches Git.");
         }
-        log.println("Applied and verified: live state matches Git.");
+        if (result.health() != null) {
+            boolean healthy = result.health().path("ok").asBoolean();
+            (healthy ? log : err).println("Health check " + (healthy ? "passed" : "FAILED") + ": " + result.health().path("url").asText()
+                    + " " + result.health().path("message").asText());
+            return healthy ? OK : ERROR;
+        }
         return OK;
     }
 
@@ -237,6 +256,31 @@ public final class Main {
 
     private int fetch(Engine engine, Target target) {
         out.println(engine.fetch(target).toPrettyString());
+        return OK;
+    }
+
+    private int search(Engine engine, String query, String format) {
+        if (query == null) {
+            throw new IllegalArgumentException("search needs --query TEXT");
+        }
+        ObjectNode result = engine.search(query, 200);
+        if (format.equals("json")) {
+            out.println(result.toPrettyString());
+            return OK;
+        }
+        for (JsonNode hit : result.path("results")) {
+            List<String> fields = new java.util.ArrayList<>();
+            hit.path("fields").forEach(f -> fields.add(f.asText()));
+            out.println(hit.path("target").asText() + "  " + hit.path("key").asText() + "  (" + String.join(", ", fields) + ")  " + hit.path("file").asText());
+        }
+        out.println(result.path("results").size() + " found" + (result.path("truncated").asBoolean() ? " (first 200)" : ""));
+        return OK;
+    }
+
+    private int codeowners(Engine engine) {
+        Path repo = engine.configRoot().toAbsolutePath().normalize().getParent();
+        boolean changed = CodeOwners.write(repo, engine.targets());
+        out.println(changed ? "Updated " + CodeOwners.file(repo) : CodeOwners.file(repo) + " is up to date");
         return OK;
     }
 

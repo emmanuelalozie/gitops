@@ -87,6 +87,17 @@ public final class Lint {
                 }
             }
         }
+        List<Target> all = engine.targets();
+        if (all.stream().anyMatch(t -> !CodeOwners.owners(t).isEmpty()) && !CodeOwners.upToDate(repo, all)) {
+            findings.addObject()
+                    .put("severity", "warning")
+                    .put("code", "codeowners-out-of-date")
+                    .put("target", "")
+                    .put("file", CodeOwners.file(repo).toString())
+                    .put("pointer", "")
+                    .put("message", "The owners in target.json files and .github/CODEOWNERS differ, so a change may not ask the"
+                            + " right people to review. Run ./gradlew codeowners and commit the result.");
+        }
         ArrayNode list = root.putArray("checks");
         for (Check check : checks) {
             list.addObject().put("workflow", check.workflow()).put("file", repo.relativize(check.file()).toString())

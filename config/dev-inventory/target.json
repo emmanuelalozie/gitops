@@ -10,5 +10,10 @@
   "verifyAfterApply": true,
   "localApply": true,
   "workflows": false,
-  "mock": "mock/db.json"
+  "mock": "mock/db.json",
+  "healthCheck": {
+    "url": "{baseUrl}/items",
+    "contains": "WID-001",
+    "timeoutSeconds": 30
+  }
 }
