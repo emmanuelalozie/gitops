@@ -124,4 +124,72 @@ class MainTest {
         assertThat(root.resolve("dev/users/samantha.json")).exists();
         assertThat(root.resolve("dev/users/bret.json")).doesNotExist();
     }
+
+    @Test
+    void planWritesJsonForProgramsAlongsideMarkdown() {
+        api.stubFor(get("/users").willReturn(okJson("[]")));
+        Path markdown = root.resolve("plan.md");
+        Path json = root.resolve("plan.json");
+
+        assertThat(run("plan", "--target", "dev", "--format", "markdown", "--out", markdown.toString(),
+                "--json-out", json.toString())).isEqualTo(Main.OK);
+
+        assertThat(markdown).content().contains("| + create | `Bret` |");
+        assertThat(Json.read(json).path("summary").path("create").asInt()).isEqualTo(1);
+        api.verify(1, getRequestedFor(urlEqualTo("/users")));
+    }
+
+    @Test
+    void applyWithAStalePlanIdChangesNothing() {
+        api.stubFor(get("/users").willReturn(okJson("[" + Json.compact(user(1, "Bret", "old@b.io")) + "]")));
+
+        assertThat(run("apply", "--target", "dev", "--plan-id", "not-the-plan")).isEqualTo(Main.PLAN_CHANGED);
+        assertThat(err.toString()).contains("changed since it was approved");
+        api.verify(0, patchRequestedFor(anyUrl()));
+    }
+
+    @Test
+    void applyWithTheCurrentPlanIdRuns() {
+        api.stubFor(get("/users").willReturn(okJson("[" + Json.compact(user(1, "Bret", "old@b.io")) + "]")));
+        api.stubFor(patch("/users/1").willReturn(okJson("{}")));
+        run("plan", "--target", "dev", "--format", "json");
+        String planId = Json.parse(out.toString()).path("planId").asText();
+
+        run("apply", "--target", "dev", "--plan-id", planId);
+
+        api.verify(patchRequestedFor(urlEqualTo("/users/1")));
+    }
+
+    @Test
+    void errorsAreJsonWhenAsked() {
+        api.stubFor(get("/users").willReturn(aResponse().withStatus(500).withBody("boom")));
+
+        assertThat(run("plan", "--target", "dev", "--format", "json")).isEqualTo(Main.ERROR);
+
+        var error = Json.parse(err.toString().strip()).path("error");
+        assertThat(error.path("code").asText()).isEqualTo(EngineError.API);
+        assertThat(error.path("details").path("status").asInt()).isEqualTo(500);
+    }
+
+    @Test
+    void targetsAreListedAsJson() {
+        assertThat(run("targets", "--format", "json")).isEqualTo(Main.OK);
+
+        var target = Json.parse(out.toString()).path("targets").get(0);
+        assertThat(target.path("name").asText()).isEqualTo("dev");
+        assertThat(target.path("workflows").asBoolean()).isTrue();
+        assertThat(target.path("localApply").asBoolean()).isFalse();
+        assertThat(target.path("resources").asInt()).isEqualTo(1);
+    }
+
+    @Test
+    void skippedTargetsWriteJsonToo() throws Exception {
+        Files.writeString(root.resolve("dev/target.json"), "{\"kind\": \"users\", \"baseUrl\": \"" + api.baseUrl()
+                + "\", \"tokenEnv\": \"GITOPS_TEST_TOKEN_THAT_IS_NEVER_SET\", \"tokenRequired\": true}");
+        Path json = root.resolve("plan.json");
+
+        run("plan", "--target", "dev", "--skip-without-token", "--json-out", json.toString());
+
+        assertThat(Json.read(json).path("skipped").asBoolean()).isTrue();
+    }
 }

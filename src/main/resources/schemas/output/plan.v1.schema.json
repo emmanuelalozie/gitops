@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/emmanuelalozie/gitops/schemas/output/plan.v1.schema.json",
+  "title": "Plan (engine output, schema version 1)",
+  "description": "What `gitops plan --format json`, `--json-out` and the engine server's plan.compute and targets.compare return. Additive changes keep version 1; anything else bumps schemaVersion.",
+  "type": "object",
+  "required": ["schemaVersion", "target", "description", "kind", "keyField", "skipped", "planId", "hasChanges", "summary", "changes", "unmanaged"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "target": { "type": "string" },
+    "description": { "type": "string" },
+    "kind": { "enum": ["users", "labels", "repository", "branch-protection"] },
+    "keyField": { "type": "string" },
+    "skipped": { "type": "boolean", "description": "True when the target was skipped because its required token isn't set." },
+    "skipReason": { "type": "string" },
+    "planId": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "sha256 of what the plan would change; pass it to apply --plan-id. Null when skipped."
+    },
+    "hasChanges": { "type": "boolean" },
+    "summary": {
+      "type": "object",
+      "required": ["create", "update", "delete"],
+      "properties": {
+        "create": { "type": "integer", "minimum": 0 },
+        "update": { "type": "integer", "minimum": 0 },
+        "delete": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["action", "key", "replace", "desired", "live", "diffs"],
+        "properties": {
+          "action": { "enum": ["create", "update", "delete"] },
+          "key": { "type": "string" },
+          "replace": { "type": "boolean", "description": "An update the provider makes by deleting and creating the resource." },
+          "desired": { "type": ["object", "null"], "description": "Managed fields from Git; null for delete." },
+          "live": { "type": ["object", "null"], "description": "Managed fields from the live system; null for create." },
+          "diffs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["field", "live", "liveMissing", "desired"],
+              "properties": {
+                "field": { "type": "string" },
+                "live": {},
+                "liveMissing": { "type": "boolean" },
+                "desired": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "unmanaged": { "type": "array", "items": { "type": "string" } },
+    "from": { "type": "string", "description": "targets.compare only." },
+    "to": { "type": "string", "description": "targets.compare only." }
+  }
+}

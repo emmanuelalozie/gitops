@@ -12,13 +12,33 @@ permissions:
   issues: write
 
 jobs:
+  targets:
+    # Every target with "workflows" on (the default) in its target.json, so a new target is checked without
+    # editing this file. The dev mock sets it off: it only exists inside CI.
+    name: List targets
+    runs-on: ubuntu-latest
+    outputs:
+      list: ${{ steps.list.outputs.list }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6
+      - id: list
+        run: |
+          ./gradlew -q targets -Pargs="--format json --out targets.json" > /dev/null
+          echo "list=$(jq -c '[.targets[] | select(.workflows) | .name]' targets.json)" >> "$GITHUB_OUTPUT"
+
   drift:
     name: Drift in ${{ matrix.target }}
+    needs: targets
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        target: [prod, github, github-repo, github-branches]
+        target: ${{ fromJSON(needs.targets.outputs.list) }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -35,9 +55,10 @@ jobs:
       - name: Plan
         id: plan
         run: |
-          ./gradlew -q plan -Ptarget=${{ matrix.target }} -Pargs="--format markdown --out plan.md --skip-without-token"
+          ./gradlew -q plan -Ptarget=${{ matrix.target }} -Pargs="--format markdown --out plan.md --json-out plan.json --skip-without-token"
           cat plan.md >> "$GITHUB_STEP_SUMMARY"
-          if grep -qE "No changes|Skipped" plan.md; then echo "drift=false"; else echo "drift=true"; fi >> "$GITHUB_OUTPUT"
+          # The JSON plan decides, not the wording of the Markdown. A skipped target has no changes.
+          echo "drift=$(jq -r '.hasChanges' plan.json)" >> "$GITHUB_OUTPUT"
       - name: Find the open drift issue
         id: issue
         run: |

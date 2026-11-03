@@ -1,10 +1,10 @@
 package gitops.providers;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.restassured.http.Method;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -35,11 +35,17 @@ abstract class GitHubProvider implements Provider {
 
     /** Every item of a paginated list endpoint under /repos/{owner}/{repo}. */
     List<ObjectNode> listAll(String path) {
+        return listAll(path, Map.of());
+    }
+
+    List<ObjectNode> listAll(String path, Map<String, ?> query) {
         List<ObjectNode> items = new ArrayList<>();
         for (int page = 1; ; page++) {
-            List<ObjectNode> batch = Http.objects(http.send(
-                    http.spec().queryParam("per_page", PAGE_SIZE).queryParam("page", page),
-                    Method.GET, "/repos/{owner}/{repo}" + path, null, owner, repo));
+            Map<String, Object> pageQuery = new LinkedHashMap<>(query);
+            pageQuery.put("per_page", PAGE_SIZE);
+            pageQuery.put("page", page);
+            List<ObjectNode> batch = Http.objects(http.send(Http.Method.GET, "/repos/{owner}/{repo}" + path,
+                    pageQuery, null, owner, repo));
             items.addAll(batch);
             if (batch.size() < PAGE_SIZE) {
                 return items;

@@ -33,7 +33,9 @@ jobs:
             echo
             echo "What the Apply workflow will change when this pull request is merged."
           } > plan.md
-          for target in prod github github-repo github-branches; do
+          # Every target the workflows manage ("workflows" in target.json, on by default; off for the dev mock).
+          ./gradlew -q targets -Pargs="--format json --out targets.json" > /dev/null
+          for target in $(jq -r '.targets[] | select(.workflows) | .name' targets.json); do
             ./gradlew -q plan -Ptarget=$target -Pargs="--format markdown --out plan-$target.md --skip-without-token"
             { echo; cat plan-$target.md; } >> plan.md
           done

@@ -22,6 +22,10 @@ import java.util.stream.Stream;
  *
  * @param prune            delete live resources that are not in Git (otherwise they are reported as unmanaged)
  * @param verifyAfterApply re-run the plan after apply and fail if drift remains
+ *
+ * <p>Two more settings say who may change the target. {@code workflows} (default true) puts it in the plan,
+ * apply and drift workflows. {@code localApply} (default false) lets the desktop app apply it from a laptop;
+ * only throwaway systems such as the dev mock should set it, since everything else changes through a merge.
  */
 public record Target(String name, Path dir, Kind kind, boolean prune, boolean verifyAfterApply, ObjectNode settings) {
 
@@ -50,6 +54,60 @@ public record Target(String name, Path dir, Kind kind, boolean prune, boolean ve
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    /** The desktop app may apply this target directly (otherwise changes go through a pull request). */
+    public boolean localApply() {
+        return settings.path("localApply").asBoolean(false);
+    }
+
+    /** The plan, apply and drift workflows manage this target. */
+    public boolean workflows() {
+        return settings.path("workflows").asBoolean(true);
+    }
+
+    public String description() {
+        return settings.path("description").asText("");
+    }
+
+    /** Whether this kind of target talks to GitHub (and so sends a token when there is one). */
+    public boolean usesGitHub() {
+        return kind != Kind.USERS;
+    }
+
+    /** Everything a program needs to know about the target, without contacting the live system. */
+    public ObjectNode toJson() {
+        ObjectNode node = Json.MAPPER.createObjectNode();
+        node.put("name", name);
+        node.put("kind", kind.id());
+        node.put("keyField", kind.keyField());
+        node.put("description", description());
+        try {
+            node.put("endpoint", endpoint());
+        } catch (IllegalArgumentException e) {
+            node.putNull("endpoint");
+        }
+        if (kind == Kind.USERS) {
+            node.put("endpointVariable", baseUrlVariable());
+            node.put("endpointOverridden", System.getenv(baseUrlVariable()) != null
+                    && !System.getenv(baseUrlVariable()).isBlank());
+        }
+        node.put("prune", prune);
+        node.put("verifyAfterApply", verifyAfterApply);
+        node.put("localApply", localApply());
+        node.put("workflows", workflows());
+        boolean tokenRequired = settings.path("tokenRequired").asBoolean(false);
+        if (usesGitHub() || tokenRequired || settings.hasNonNull("tokenEnv")) {
+            node.put("tokenVariable", tokenVariable());
+        } else {
+            node.putNull("tokenVariable");
+        }
+        node.put("tokenRequired", tokenRequired);
+        node.put("tokenPresent", token() != null);
+        node.put("dir", dir.toString());
+        node.put("resourceDir", resourceDir().toString());
+        node.put("resources", store().files().size());
+        return node;
     }
 
     public Path resourceDir() {

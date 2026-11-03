@@ -3,7 +3,7 @@ plugins {
 }
 
 group = 'gitops'
-version = '0.1.0'
+version = '0.2.0'
 
 java {
     toolchain {
@@ -16,9 +16,10 @@ repositories {
 }
 
 dependencies {
-    implementation 'io.rest-assured:rest-assured:6.1.0'
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.22.3'
     implementation 'com.networknt:json-schema-validator:3.0.8'
+    // YAML for reading .github/workflows (Lint). Jackson 3, like the schema validator, which already brings it.
+    implementation 'tools.jackson.dataformat:jackson-dataformat-yaml:3.2.1'
     implementation 'org.slf4j:slf4j-nop:2.0.20'
 
     testImplementation platform('org.junit:junit-bom:6.1.3')
@@ -28,8 +29,18 @@ dependencies {
     testImplementation 'org.assertj:assertj-core:3.27.7'
 }
 
+tasks.named('jar') {
+    manifest {
+        // Engine.VERSION reads this, and the desktop app checks it at startup.
+        attributes('Implementation-Title': 'gitops', 'Implementation-Version': project.version, 'Main-Class': 'gitops.Main')
+    }
+}
+
 tasks.named('test') {
     useJUnitPlatform()
+    // ./gradlew test -Dgitops.updateFixtures=true rewrites the JSON fixtures the desktop app tests share.
+    systemProperty 'gitops.updateFixtures', System.getProperty('gitops.updateFixtures', 'false')
+    inputs.dir('desktop/src/fixtures').optional()
     testLogging {
         events = ['failed']
         exceptionFormat = 'full'
@@ -45,6 +56,9 @@ tasks.named('test') {
 //   ./gradlew applyConfig -Ptarget=dev       make the live system match Git
 //   ./gradlew snapshot -Ptarget=prod         import live state into Git (bootstrap)
 //   ./gradlew fetch -Ptarget=prod            print live state
+//   ./gradlew targets                        list targets (-Pargs="--format json" for programs and workflows)
+//   ./gradlew lint                           cross-file checks, e.g. required status checks vs workflow jobs
+//   ./gradlew engineBundle                   the engine with its own Java runtime, for the desktop app
 // Extra CLI flags can be passed with -Pargs="--format markdown --out plan.md".
 // ---------------------------------------------------------------------------
 
@@ -59,6 +73,10 @@ def gitopsTask(String name, String description, List<String> cliArgs) {
         args = cliArgs + (extra ? extra.split(/\s+/).toList() : [])
     }
 }
+
+// Java modules the engine needs (checked with: jdeps --print-module-deps on build/engine/lib).
+// java.net.http for the providers; java.sql and java.desktop (java.beans) because Jackson links to them; jdk.crypto.ec for TLS.
+ext.engineModules = ['java.base', 'java.desktop', 'java.logging', 'java.net.http', 'java.sql', 'java.xml', 'jdk.crypto.ec', 'jdk.zipfs']
 
 // No default target: a forgotten -Ptarget must fail, not quietly change prod.
 def target = project.findProperty('target')
@@ -78,3 +96,50 @@ gitopsTask('detectDrift', 'Fails if the live system has drifted from Git.', ['pl
 gitopsTask('applyConfig', 'Reconciles the live system to match Git.', ['apply'] + targetArgs)
 gitopsTask('snapshot', 'Writes the live state of the target into Git.', ['snapshot'] + targetArgs)
 gitopsTask('fetch', 'Prints the live state of the target.', ['fetch'] + targetArgs)
+gitopsTask('targets', 'Lists the targets and their settings.', ['targets'])
+gitopsTask('lint', 'Checks across files, such as required status checks that no workflow job reports.', ['lint'])
+
+// ---------------------------------------------------------------------------
+// The engine for the desktop app (desktop/): the jars plus a Java runtime trimmed with jlink, so people
+// running the app don't need Java installed. Output: build/engine/{lib,runtime,engine.json}.
+// The app starts it as: runtime/bin/java -cp "lib/*" gitops.Main serve --config-dir <repo>/config
+// ---------------------------------------------------------------------------
+def engineDir = layout.buildDirectory.dir('engine')
+
+tasks.register('engineLibs', Sync) {
+    group = 'gitops'
+    description = 'Copies the engine jar and its dependencies to build/engine/lib.'
+    from(tasks.named('jar'))
+    from(configurations.runtimeClasspath)
+    into(engineDir.map { it.dir('lib') })
+}
+
+tasks.register('engineRuntime', Exec) {
+    group = 'gitops'
+    description = 'Builds a trimmed Java runtime for the engine with jlink into build/engine/runtime.'
+    def launcher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    def runtime = engineDir.map { it.dir('runtime') }
+    inputs.property('modules', engineModules)
+    outputs.dir(runtime)
+    doFirst {
+        delete(runtime)
+        def javaHome = launcher.get().metadata.installationPath.asFile
+        commandLine new File(javaHome, 'bin/jlink').absolutePath,
+                '--add-modules', engineModules.join(','),
+                '--strip-debug', '--no-header-files', '--no-man-pages', '--compress', 'zip-9',
+                '--output', runtime.get().asFile.absolutePath
+    }
+}
+
+tasks.register('engineBundle') {
+    group = 'gitops'
+    description = 'Builds the self-contained engine the desktop app runs: build/engine.'
+    dependsOn('engineLibs', 'engineRuntime')
+    def manifest = engineDir.map { it.file('engine.json') }
+    def engineVersion = project.version.toString()
+    outputs.file(manifest)
+    doLast {
+        manifest.get().asFile.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(
+                [engineVersion: engineVersion, schemaVersion: 1, mainClass: 'gitops.Main']))
+    }
+}

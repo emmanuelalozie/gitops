@@ -2,7 +2,6 @@ package gitops.providers;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import gitops.Plan.FieldDiff;
-import io.restassured.http.Method;
 
 import java.util.List;
 
@@ -20,7 +19,7 @@ public final class GitHubLabelsProvider extends GitHubProvider {
 
     @Override
     public void create(ObjectNode desired) {
-        http.send(Method.POST, "/repos/{owner}/{repo}/labels", desired, owner, repo);
+        http.send(Http.Method.POST, "/repos/{owner}/{repo}/labels", desired, owner, repo);
     }
 
     @Override
@@ -28,11 +27,11 @@ public final class GitHubLabelsProvider extends GitHubProvider {
         ObjectNode patch = desired.objectNode();
         // Label names match case-insensitively, so a name diff is a change of case, which GitHub calls new_name.
         diffs.forEach(d -> patch.set(d.field().equals("name") ? "new_name" : d.field(), d.desired()));
-        http.send(Method.PATCH, "/repos/{owner}/{repo}/labels/{name}", patch, owner, repo, live.path("name").asText());
+        http.send(Http.Method.PATCH, "/repos/{owner}/{repo}/labels/{name}", patch, owner, repo, live.path("name").asText());
     }
 
     @Override
     public void delete(ObjectNode live) {
-        http.send(Method.DELETE, "/repos/{owner}/{repo}/labels/{name}", null, owner, repo, live.path("name").asText());
+        http.send(Http.Method.DELETE, "/repos/{owner}/{repo}/labels/{name}", null, owner, repo, live.path("name").asText());
     }
 }
