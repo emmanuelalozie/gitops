@@ -10,6 +10,13 @@ const COMMANDS: &[&str] = &[
     "token_status",
     "set_token",
     "clear_token",
+    "config_changes",
+    "working_diff",
+    "discard_change",
+    "file_history",
+    "commit_diff",
+    "propose",
+    "open_url",
 ];
 
 fn main() {

@@ -18,7 +18,7 @@ export function PlanView({ plan, liveLabel = "Live", desiredLabel = "Git" }: { p
     <div className="plan">
       <div className="plan-summary">
         {plan.hasChanges ? <Counts summary={plan.summary} /> : <span className="ok-text">No changes. {liveLabel} matches {desiredLabel}.</span>}
-        {plan.planId && (
+        {plan.planId && !plan.from && (
           <span className="muted" title={plan.planId}>
             plan <code>{shortId(plan.planId)}</code>
           </span>

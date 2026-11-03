@@ -132,6 +132,7 @@ public final class EngineServer {
             case "live.fetch" -> Json.MAPPER.createObjectNode().set("resources", engine.fetch(engine.target(required(params, "target"))));
             case "targets.compare" -> engine.compare(required(params, "from"), required(params, "to"));
             case "kind.schema" -> engine.schema(required(params, "kind"));
+            case "resources.list" -> engine.resources(engine.target(required(params, "target")));
             case "resource.check" -> check(params);
             case "resource.write" -> locked(required(params, "target"), () -> engine.writeResource(
                     engine.target(required(params, "target")), object(params, "resource"), optional(params, "previousKey")));

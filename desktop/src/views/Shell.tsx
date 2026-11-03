@@ -3,19 +3,19 @@ import { health } from "../lib/model";
 import { inDesktop } from "../lib/api";
 import { useRepo, type Page } from "../state";
 
-function NavButton({ page, current, children, count }: { page: Page; current: Page; children: ReactNode; count?: number }) {
+function NavButton({ page, current, children, count, tone }: { page: Page; current: Page; children: ReactNode; count?: number; tone?: "info" }) {
   const { go } = useRepo();
   const active = page.name === current.name && (page.name !== "target" || (current.name === "target" && current.target === page.target));
   return (
     <button className={active ? "nav active" : "nav"} aria-current={active ? "page" : undefined} onClick={() => go(page)}>
       {children}
-      {count !== undefined && count > 0 && <span className="nav-count">{count}</span>}
+      {count !== undefined && count > 0 && <span className={tone ? `nav-count ${tone}` : "nav-count"}>{count}</span>}
     </button>
   );
 }
 
 export function Shell({ children }: { children: ReactNode }) {
-  const { repo, targets, plans, page, validation, lint, close } = useRepo();
+  const { repo, targets, plans, page, validation, lint, changeCount, close } = useRepo();
   const problemCount =
     (validation.state === "ok" ? validation.value.targets.reduce((n, t) => n + t.problems.length, 0) : 0) +
     (lint.state === "ok" ? lint.value.findings.length : 0);
@@ -32,7 +32,9 @@ export function Shell({ children }: { children: ReactNode }) {
         </div>
         <nav>
           <NavButton page={{ name: "overview" }} current={page}>Overview</NavButton>
+          <NavButton page={{ name: "changes" }} current={page} count={changeCount} tone="info">Changes</NavButton>
           <NavButton page={{ name: "problems" }} current={page} count={problemCount}>Problems</NavButton>
+          <NavButton page={{ name: "compare" }} current={page}>Compare</NavButton>
           <div className="nav-heading">Targets</div>
           {targets.state === "ok" &&
             targets.value.map((t) => (

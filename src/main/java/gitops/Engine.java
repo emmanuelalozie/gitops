@@ -169,6 +169,26 @@ public final class Engine {
         return json;
     }
 
+    /** The resources in Git for a target, each with its key and file. Unreadable files come back with an error. */
+    public ObjectNode resources(Target target) {
+        ObjectNode root = Json.MAPPER.createObjectNode().put("schemaVersion", PlanJson.SCHEMA_VERSION)
+                .put("target", target.name()).put("kind", target.kind().id()).put("keyField", target.kind().keyField());
+        ArrayNode list = root.putArray("resources");
+        for (Path file : target.store().files()) {
+            ObjectNode item = list.addObject().put("file", file.toString());
+            try {
+                JsonNode resource = Json.read(file);
+                item.put("key", resource.path(target.kind().keyField()).asText(""));
+                item.set("resource", resource);
+            } catch (IllegalArgumentException e) {
+                item.put("key", "");
+                item.putNull("resource");
+                item.put("error", e.getMessage());
+            }
+        }
+        return root;
+    }
+
     public JsonNode schema(String kindId) {
         return Kind.fromId(kindId).schema();
     }

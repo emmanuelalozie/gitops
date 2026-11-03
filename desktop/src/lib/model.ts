@@ -74,3 +74,10 @@ export function columns(resources: Record<string, Json>[], preferred: string[] =
   for (const r of resources) for (const k of Object.keys(r)) if (!seen.has(k)) { seen.add(k); extra.push(k); }
   return [...preferred.filter((p) => resources.some((r) => p in r)), ...extra];
 }
+
+/** An engine path (absolute in the app) as a path inside the repository, with forward slashes. */
+export function repoRelative(path: string, repoRoot: string): string {
+  const p = path.replace(/\\/g, "/");
+  const root = repoRoot.replace(/\\/g, "/").replace(/\/+$/, "");
+  return p.startsWith(root + "/") ? p.slice(root.length + 1) : p;
+}

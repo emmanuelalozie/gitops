@@ -9,6 +9,8 @@ export type Page =
   | { name: "overview" }
   | { name: "target"; target: string; tab?: string }
   | { name: "problems" }
+  | { name: "changes" }
+  | { name: "compare" }
   | { name: "settings" };
 
 interface RepoState {
@@ -17,6 +19,8 @@ interface RepoState {
   plans: Record<string, Load<Plan>>;
   validation: Load<Validation>;
   lint: Load<Lint>;
+  /** How many files under config/ have uncommitted changes. */
+  changeCount: number;
   page: Page;
   go: (page: Page) => void;
   planTarget: (name: string) => Promise<void>;
@@ -50,6 +54,7 @@ export function RepoProvider({ initial, onClose, children }: { initial: RepoInfo
   const [plans, setPlans] = useState<Record<string, Load<Plan>>>({});
   const [validation, setValidation] = useState<Load<Validation>>({ state: "loading" });
   const [lint, setLint] = useState<Load<Lint>>({ state: "loading" });
+  const [changeCount, setChangeCount] = useState(0);
   const [page, setPage] = useState<Page>({ name: "overview" });
   const [revision, setRevision] = useState(0);
   const targetsRef = useRef<Target[]>([]);
@@ -65,11 +70,12 @@ export function RepoProvider({ initial, onClose, children }: { initial: RepoInfo
   }, [planTarget]);
 
   const reload = useCallback(async () => {
-    const [t, v, l] = await Promise.all([load(api.targets()), load(api.validate()), load(api.lint())]);
+    const [t, v, l, c] = await Promise.all([load(api.targets()), load(api.validate()), load(api.lint()), load(api.configChanges())]);
     if (t.state === "ok") targetsRef.current = t.value;
     setTargets(t);
     setValidation(v);
     setLint(l);
+    setChangeCount(c.state === "ok" ? c.value.length : 0);
     setRevision((r) => r + 1);
   }, []);
 
@@ -90,8 +96,8 @@ export function RepoProvider({ initial, onClose, children }: { initial: RepoInfo
   }, [reload, planTarget]);
 
   const value = useMemo<RepoState>(
-    () => ({ repo, targets, plans, validation, lint, page, go: setPage, planTarget, planAll, reload, setRepo, close: onClose, revision }),
-    [repo, targets, plans, validation, lint, page, planTarget, planAll, reload, onClose, revision],
+    () => ({ repo, targets, plans, validation, lint, changeCount, page, go: setPage, planTarget, planAll, reload, setRepo, close: onClose, revision }),
+    [repo, targets, plans, validation, lint, changeCount, page, planTarget, planAll, reload, onClose, revision],
   );
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }

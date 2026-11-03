@@ -2,7 +2,9 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "The main window: the app's own commands and a folder picker. No shell, no filesystem, no HTTP from the webview.",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "dialog:allow-open",
@@ -15,6 +17,13 @@
     "allow-engine-info",
     "allow-token-status",
     "allow-set-token",
-    "allow-clear-token"
+    "allow-clear-token",
+    "allow-config-changes",
+    "allow-working-diff",
+    "allow-discard-change",
+    "allow-file-history",
+    "allow-commit-diff",
+    "allow-propose",
+    "allow-open-url"
   ]
 }

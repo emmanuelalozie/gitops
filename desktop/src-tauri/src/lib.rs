@@ -7,6 +7,7 @@
 mod engine;
 mod error;
 mod git;
+mod github;
 mod secrets;
 mod settings;
 mod watcher;
@@ -20,6 +21,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_opener::OpenerExt;
 
 /// An open repository: its engine and the watcher on its files.
 struct Session {
@@ -31,6 +33,7 @@ struct Session {
 
 pub struct AppState {
     session: Mutex<Option<Session>>,
+    github: github::GitHub,
     settings: Mutex<Settings>,
     settings_file: PathBuf,
 }
@@ -47,6 +50,10 @@ impl AppState {
 
     fn repo(&self) -> Result<PathBuf> {
         self.session.lock().unwrap().as_ref().map(|s| s.repo.clone()).ok_or_else(|| AppError::repo("No repository is open"))
+    }
+
+    fn github_token(&self) -> Option<String> {
+        secrets::get("GITHUB_TOKEN").ok().flatten()
     }
 
     fn save_settings(&self) -> Result<()> {
@@ -224,14 +231,92 @@ fn clear_token(state: State<'_, AppState>, name: String) -> Result<()> {
     state.save_settings()
 }
 
+#[tauri::command]
+fn config_changes(state: State<'_, AppState>) -> Result<Vec<git::ConfigChange>> {
+    git::config_changes(&state.repo()?)
+}
+
+#[tauri::command]
+fn working_diff(state: State<'_, AppState>, path: String) -> Result<String> {
+    git::working_diff(&state.repo()?, &path)
+}
+
+#[tauri::command]
+fn discard_change(state: State<'_, AppState>, path: String) -> Result<()> {
+    git::discard(&state.repo()?, &path)
+}
+
+#[tauri::command]
+fn file_history(state: State<'_, AppState>, path: String, limit: Option<usize>) -> Result<Vec<git::Commit>> {
+    git::history(&state.repo()?, &path, limit.unwrap_or(100))
+}
+
+#[tauri::command]
+fn commit_diff(state: State<'_, AppState>, sha: String, path: String) -> Result<String> {
+    git::commit_diff(&state.repo()?, &sha, &path)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProposeResult {
+    proposed: git::Proposed,
+    base: String,
+    /// The pull request the app opened, when it had a token to do it.
+    pull_request: Option<Value>,
+    /// Otherwise (or if opening it failed): GitHub's form for opening it by hand.
+    compare_url: Option<String>,
+    pull_request_error: Option<AppError>,
+}
+
+/// Commits the chosen config files to a new branch, pushes it and opens a pull request into the default branch.
+#[tauri::command]
+async fn propose(state: State<'_, AppState>, proposal: git::Proposal) -> Result<ProposeResult> {
+    let repo = state.repo()?;
+    let status = git::status(&repo)?;
+    let worker_repo = repo.clone();
+    let worker_proposal = proposal.clone();
+    let proposed = tauri::async_runtime::spawn_blocking(move || git::propose(&worker_repo, &worker_proposal))
+        .await
+        .map_err(|e| AppError::internal(e.to_string()))??;
+    let base = status.default_branch.clone().unwrap_or_else(|| proposed.from_branch.clone());
+    let mut result = ProposeResult { proposed, base: base.clone(), pull_request: None, compare_url: None, pull_request_error: None };
+    let Some(github) = status.github else { return Ok(result) };
+    if !result.proposed.pushed {
+        return Ok(result);
+    }
+    match state.github_token() {
+        Some(token) => match state.github.create_pull(&github, &token, &result.proposed.branch, &base, &proposal.title, &proposal.body).await {
+            Ok(pull) => result.pull_request = Some(pull),
+            Err(e) => {
+                result.pull_request_error = Some(e);
+                result.compare_url = Some(github::compare_url(&github, &base, &result.proposed.branch));
+            }
+        },
+        None => result.compare_url = Some(github::compare_url(&github, &base, &result.proposed.branch)),
+    }
+    Ok(result)
+}
+
+/// Opens a GitHub page in the browser. Nothing else: the webview can't open arbitrary URLs.
+#[tauri::command]
+fn open_url(app: AppHandle, url: String) -> Result<()> {
+    if !url.starts_with("https://github.com/") || url.chars().any(char::is_whitespace) {
+        return Err(AppError::new("internal", "not_allowed", "Only github.com links can be opened"));
+    }
+    app.opener().open_url(url, None::<&str>).map_err(|e| AppError::internal(e.to_string()))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let settings_file = app.path().app_config_dir()?.join("settings.json");
+            let api = std::env::var("GITHUB_API_URL").unwrap_or_else(|_| github::API.to_string());
             app.manage(AppState {
                 session: Mutex::new(None),
+                github: github::GitHub::new(&api)?,
                 settings: Mutex::new(Settings::load(&settings_file)),
                 settings_file,
             });
@@ -248,6 +333,13 @@ pub fn run() {
             token_status,
             set_token,
             clear_token,
+            config_changes,
+            working_diff,
+            discard_change,
+            file_history,
+            commit_diff,
+            propose,
+            open_url,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the GitOps app")

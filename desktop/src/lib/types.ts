@@ -139,3 +139,40 @@ export interface ApplyProgress {
   state: "starting" | "finished" | "failed";
   error?: AppError;
 }
+
+export interface ResourceEntry {
+  key: string;
+  file: string;
+  resource: Resource | null;
+  error?: string;
+}
+
+export interface ConfigChange {
+  path: string;
+  status: "modified" | "added" | "deleted" | "renamed" | "untracked";
+  target: string | null;
+}
+
+export interface Commit {
+  sha: string;
+  short: string;
+  author: string;
+  date: string;
+  subject: string;
+  pullRequest: number | null;
+}
+
+export interface Proposal {
+  branch: string;
+  title: string;
+  body: string;
+  paths: string[];
+}
+
+export interface ProposeResult {
+  proposed: { branch: string; commit: string; fromBranch: string; pushed: boolean; pushError: string | null };
+  base: string;
+  pullRequest: { number: number; url: string } | null;
+  compareUrl: string | null;
+  pullRequestError: AppError | null;
+}

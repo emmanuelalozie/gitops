@@ -28,7 +28,11 @@ pub const ALLOWED_METHODS: &[&str] = &[
     "live.fetch",
     "targets.compare",
     "kind.schema",
+    "resources.list",
     "resource.check",
+    // Writes go through the engine so files keep the canonical format and invalid ones are refused.
+    "resource.write",
+    "resource.delete",
     "repo.lint",
 ];
 

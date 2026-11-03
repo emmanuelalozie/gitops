@@ -95,6 +95,22 @@ async function engineCall(method: string, params: Record<string, unknown>): Prom
       return schemas[String(params.kind)] ?? { type: "object", properties: {} };
     case "resource.check":
       return { ok: true, problems: [] };
+    case "resources.list":
+      return { resources: (params.target === "dev" || params.target === "prod" ? users : []).map((u) => ({
+        key: String(u.username), file: `config/${params.target}/users/${String(u.username).toLowerCase()}.json`, resource: u })) };
+    case "resource.write": {
+      const r = params.resource as Resource;
+      const i = users.findIndex((u) => u.username === (params.previousKey ?? r.username));
+      if (i >= 0) users[i] = r; else users.push(r);
+      changes.add(`config/${params.target}/users/${String(r.username).toLowerCase()}.json`);
+      return { file: `config/${params.target}/users/${String(r.username).toLowerCase()}.json`, removed: [] };
+    }
+    case "resource.delete": {
+      const i = users.findIndex((u) => u.username === params.key);
+      if (i >= 0) users.splice(i, 1);
+      changes.add(`config/${params.target}/users/${String(params.key).toLowerCase()}.json`);
+      return { file: "", removed: i >= 0 };
+    }
     case "targets.compare":
       return { ...emptyPlan(demoTargets[0]!), target: `${params.from} -> ${params.to}`, from: params.from, to: params.to };
     case "repo.lint":
@@ -126,6 +142,11 @@ const repo = {
 };
 
 const tokens = new Map<string, boolean>();
+const changes = new Set<string>(["config/dev/users/bret.json"]);
+const history = [
+  { sha: "5dc5699aa", short: "5dc5699", author: "Emmanuel Alozie", date: "2026-10-30T18:02:11Z", subject: "Merge pull request #14 from emmanuelalozie/fix/demo-windows-localhost", pullRequest: 14 },
+  { sha: "a1b2c3d4e", short: "a1b2c3d", author: "Emmanuel Alozie", date: "2026-10-21T09:40:00Z", subject: "Add Moriah.Stanton to dev (#11)", pullRequest: 11 },
+];
 
 export const demo = {
   async invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
@@ -144,6 +165,23 @@ export const demo = {
           return { ...repo.engine, alive: true };
         case "engine_call":
           return engineCall(String(args.method), (args.params as Record<string, unknown>) ?? {});
+        case "config_changes":
+          return [...changes].map((path) => ({ path, status: "modified", target: path.split("/")[1] ?? null }));
+        case "working_diff":
+          return `--- a/${args.path}\n+++ b/${args.path}\n@@ -1,6 +1,6 @@\n {\n   "id": 1,\n   "username": "Bret",\n-  "email": "old@b.io",\n+  "email": "new@b.io",\n   "phone": "555-0100"\n }\n`;
+        case "discard_change":
+          changes.delete(String(args.path));
+          return null;
+        case "file_history":
+          return history;
+        case "commit_diff":
+          return `--- a/config/dev/users/moriah.stanton.json\n+++ b/config/dev/users/moriah.stanton.json\n@@ -0,0 +1,6 @@\n+{\n+  "id": 5,\n+  "username": "Moriah.Stanton"\n+}\n`;
+        case "propose": {
+          const p = args.proposal as { branch: string; paths: string[] };
+          p.paths.forEach((x) => changes.delete(x));
+          return { proposed: { branch: p.branch, commit: "f00dfeed", fromBranch: "develop", pushed: true, pushError: null }, base: "develop",
+            pullRequest: null, compareUrl: `https://github.com/emmanuelalozie/gitops/compare/develop...${p.branch}?expand=1`, pullRequestError: null };
+        }
         case "token_status":
           return (args.names as string[]).map((name) => ({ name, present: tokens.get(name) ?? false }));
         case "set_token":

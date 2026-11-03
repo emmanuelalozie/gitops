@@ -209,6 +209,54 @@ nav { padding: 8px; display: grid; gap: 1px; }
 .facts-list dt { color: var(--muted); }
 .facts-list dd { margin: 0; }
 
+/* Phase 2: editor, changes, history */
+.nav-count.info { background: var(--info-bg); color: var(--info); }
+.toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.toolbar p { margin: 0; }
+.toolbar.start { justify-content: flex-start; }
+label.inline { display: inline-flex; gap: 6px; align-items: center; }
+.notice { background: var(--info-bg); color: var(--text); border-left: 3px solid var(--info); border-radius: var(--radius); padding: 10px 14px; margin-bottom: 14px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.notice.warn { background: var(--update-bg); border-left-color: var(--update); }
+.push-right { margin-left: auto; }
+.grid.selectable tbody tr { cursor: pointer; }
+.grid.selectable tbody tr:hover td, .grid.selectable tbody tr:focus td { background: var(--panel-2); }
+.grid.selectable td { color: var(--text) !important; }
+.row-action { color: var(--accent) !important; text-align: right; font-size: 12.5px; }
+.editor { max-width: 720px; }
+.editor form { display: grid; gap: 14px; }
+.field { display: grid; gap: 4px; }
+.field label { display: flex; gap: 8px; align-items: center; }
+.field input[type="text"], .field textarea, .field select { width: 100%; font-family: var(--mono); font-size: 13px; }
+.field.invalid input, .field.invalid textarea, .field.invalid select { border-color: var(--delete); }
+.hint { font-size: 12px; color: var(--muted); }
+.field-problem { font-size: 12.5px; color: var(--delete); margin: 0; }
+.editor-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.confirm { display: inline-flex; gap: 6px; align-items: center; margin-left: auto; }
+.difftext { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 0; overflow: auto; margin: 0; }
+.dl { display: block; padding: 0 12px; }
+.dl-add { background: var(--create-bg); color: var(--create); }
+.dl-del { background: var(--delete-bg); color: var(--delete); }
+.dl-hunk { color: var(--info); }
+.dl-meta { color: var(--muted); }
+.history { display: grid; grid-template-columns: minmax(260px, 2fr) 3fr; gap: 16px; align-items: start; }
+.commits { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
+.commits li { display: flex; align-items: center; gap: 6px; }
+.commit { flex: 1; display: grid; text-align: left; border: 1px solid transparent; background: none; padding: 6px 10px; }
+.commit.active, .commit:hover { background: var(--panel); border-color: var(--border); }
+.commit-subject { font-weight: 500; }
+.changes-layout { display: grid; grid-template-columns: 3fr 2fr; gap: 20px; align-items: start; }
+.file-list { list-style: none; padding: 0; margin: 0 0 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); }
+.file-list li { display: flex; gap: 8px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+.file-list li:last-child { border-bottom: none; }
+.file-list li.active { background: var(--panel-2); }
+.file-list .file { flex: 1; text-align: left; font-family: var(--mono); font-size: 12.5px; color: var(--text); }
+.propose { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; display: grid; gap: 10px; position: sticky; top: 16px; }
+.propose h2 { margin: 0; }
+.propose label { display: grid; gap: 4px; font-size: 12.5px; color: var(--muted); }
+.propose input, .propose textarea { width: 100%; color: var(--text); }
+.propose .small { margin: 0; }
+.plan-line { display: flex; justify-content: space-between; align-items: center; }
+
 @media (prefers-reduced-motion: reduce) {
   .spin, .health-loading .dot, .dot.health-loading { animation: none; }
 }

@@ -90,6 +90,7 @@ Requests run in parallel on a small pool; anything that changes a target (`plan.
 | `plan.apply` | `target`, `planId`, `allowDeleteAll?` | `{applied, verified, verifyAfterApply, planId, after}`; only for targets with `"localApply": true` |
 | `live.fetch` | `target` | `{resources: [...]}` (everything the live system returns) |
 | `targets.compare` | `from`, `to` | a plan that would make `to`'s Git config match `from`'s, plus `from` and `to` |
+| `resources.list` | `target` | `{resources: [{key, file, resource}]}` from Git; an unreadable file has `error` and `resource: null` |
 | `kind.schema` | `kind` | the kind's JSON Schema |
 | `resource.check` | `target`, `resource`, `previousKey?` | `{ok, problems}`: schema, duplicate key, unique fields |
 | `resource.write` | `target`, `resource`, `previousKey?` | `{file, removed: [...]}`; writes in the canonical file format, refuses invalid resources |

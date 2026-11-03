@@ -1,7 +1,10 @@
 // Every call the UI makes. Inside the desktop app these go to the Rust commands; in a plain browser
 // (npm run dev, or screenshots) they go to the demo backend in demo.ts, which serves the fixtures.
 
-import type { AppError, AppInfo, EngineVersion, Json, Lint, Plan, Problem, RepoInfo, RepoStatus, Resource, Target, TokenStatus, Validation } from "./types";
+import type {
+  AppError, AppInfo, Commit, ConfigChange, EngineVersion, Json, Lint, Plan, Problem, Proposal, ProposeResult, RepoInfo,
+  RepoStatus, Resource, ResourceEntry, Target, TokenStatus, Validation,
+} from "./types";
 import { demo } from "./demo";
 
 type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
@@ -60,6 +63,18 @@ export const api = {
   checkResource: (target: string, resource: Resource, previousKey?: string) =>
     engine<{ ok: boolean; problems: Problem[] }>("resource.check", { target, resource, previousKey }),
   lint: () => engine<Lint>("repo.lint"),
+  resources: (target: string) => engine<{ resources: ResourceEntry[] }>("resources.list", { target }).then((r) => r.resources),
+  writeResource: (target: string, resource: Resource, previousKey?: string) =>
+    engine<{ file: string; removed: string[] }>("resource.write", { target, resource, previousKey }),
+  deleteResource: (target: string, key: string) => engine<{ file: string; removed: boolean }>("resource.delete", { target, key }),
+
+  configChanges: () => call<ConfigChange[]>("config_changes"),
+  workingDiff: (path: string) => call<string>("working_diff", { path }),
+  discardChange: (path: string) => call<void>("discard_change", { path }),
+  history: (path: string, limit = 100) => call<Commit[]>("file_history", { path, limit }),
+  commitDiff: (sha: string, path: string) => call<string>("commit_diff", { sha, path }),
+  propose: (proposal: Proposal) => call<ProposeResult>("propose", { proposal }),
+  openUrl: (url: string) => (inDesktop ? call<void>("open_url", { url }) : Promise.resolve(void window.open(url, "_blank", "noopener"))),
 
   pickFolder: async (): Promise<string | null> => {
     if (!inDesktop) return demo.pickFolder();

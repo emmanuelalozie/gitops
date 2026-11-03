@@ -2,6 +2,8 @@ import { useCallback, useState } from "react";
 import { api } from "./lib/api";
 import type { RepoInfo } from "./lib/types";
 import { RepoProvider, useRepo } from "./state";
+import { Changes } from "./views/Changes";
+import { Compare } from "./views/Compare";
 import { Overview } from "./views/Overview";
 import { Problems } from "./views/Problems";
 import { Settings } from "./views/Settings";
@@ -35,6 +37,10 @@ function Router() {
       return <TargetPage name={page.target} />;
     case "problems":
       return <Problems />;
+    case "changes":
+      return <Changes />;
+    case "compare":
+      return <Compare />;
     case "settings":
       return <Settings />;
   }

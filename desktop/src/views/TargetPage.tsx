@@ -5,8 +5,10 @@ import type { Resource, Target } from "../lib/types";
 import { PlanView } from "../components/PlanView";
 import { Empty, ErrorBox, HealthBadge, Spinner, Tabs, Tag } from "../components/ui";
 import { useRepo } from "../state";
+import { ConfigTab } from "./ConfigTab";
+import { HistoryTab } from "./HistoryTab";
 
-type Tab = "plan" | "live";
+type Tab = "plan" | "config" | "live" | "history";
 
 export function TargetPage({ name }: { name: string }) {
   const { targets, plans, planTarget, page, go } = useRepo();
@@ -28,7 +30,12 @@ export function TargetPage({ name }: { name: string }) {
         <button onClick={() => void planTarget(name)} disabled={plan?.state === "loading"}>Re-plan</button>
       </header>
       <Tabs<Tab>
-        tabs={[{ id: "plan", label: "Plan" }, { id: "live", label: "Live state" }]}
+        tabs={[
+          { id: "plan", label: "Plan" },
+          { id: "config", label: "Git config" },
+          { id: "live", label: "Live state" },
+          { id: "history", label: "History" },
+        ]}
         value={tab}
         onChange={(t) => go({ name: "target", target: name, tab: t })}
       />
@@ -45,7 +52,9 @@ export function TargetPage({ name }: { name: string }) {
           )}
         </section>
       )}
+      {tab === "config" && <ConfigTab target={target} />}
       {tab === "live" && <LiveState target={target} />}
+      {tab === "history" && <HistoryTab target={target} />}
     </div>
   );
 }

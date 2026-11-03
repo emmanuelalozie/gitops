@@ -1,4 +1,4 @@
-import { affectedTargets, columns, formatValue, health, relativeTime, shortId, targetOfPath, tokenNames } from "./model";
+import { affectedTargets, repoRelative, columns, formatValue, health, relativeTime, shortId, targetOfPath, tokenNames } from "./model";
 import { demoTargets } from "./demo";
 import type { Plan } from "./types";
 import planFixture from "../fixtures/plan.json";
@@ -55,4 +55,10 @@ it("says how long ago", () => {
 
 it("orders columns by schema first", () => {
   expect(columns([{ website: "x", id: 1, username: "a" }], ["id", "username", "email"])).toEqual(["id", "username", "website"]);
+});
+
+it("makes engine paths relative to the repository", () => {
+  expect(repoRelative("/home/me/gitops/config/dev/users/bret.json", "/home/me/gitops")).toBe("config/dev/users/bret.json");
+  expect(repoRelative("C:\\r\\config\\dev\\a.json", "C:\\r\\")).toBe("config/dev/a.json");
+  expect(repoRelative("config/dev/a.json", "/elsewhere")).toBe("config/dev/a.json");
 });

@@ -123,6 +123,19 @@ class EngineServerTest {
     }
 
     @Test
+    void listsTheResourcesInGit() throws Exception {
+        Files.writeString(root.resolve("dev/users/broken.json"), "{not json");
+
+        JsonNode resources = response(exchange(request(1, "resources.list", "{\"target\": \"dev\"}")), 1)
+                .path("result").path("resources");
+
+        assertThat(resources).hasSize(2);
+        assertThat(resources.get(0).path("key").asText()).isEqualTo("Bret");
+        assertThat(resources.get(0).path("resource").path("email").asText()).isEqualTo("new@b.io");
+        assertThat(resources.get(1).path("error").asText()).contains("not valid JSON");
+    }
+
+    @Test
     void comparesTwoTargetsInGit() {
         JsonNode result = response(exchange(request(1, "targets.compare", "{\"from\": \"dev\", \"to\": \"prod\"}")), 1)
                 .path("result");
