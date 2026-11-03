@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, inDesktop } from "../lib/api";
 import type { AppError, AppInfo, RepoInfo } from "../lib/types";
 import { ErrorBox, Spinner } from "../components/ui";
+import { NotGitOps, notGitOpsCodes } from "../components/NotGitOps";
 
 export function Welcome({ onOpen }: { onOpen: (repo: RepoInfo) => void }) {
   const [info, setInfo] = useState<AppInfo | null>(null);
@@ -40,7 +41,11 @@ export function Welcome({ onOpen }: { onOpen: (repo: RepoInfo) => void }) {
           Open a repository…
         </button>
         {busy && <Spinner label={`Starting the engine for ${busy}…`} />}
-        {error && <ErrorBox error={error} />}
+        {error && error.kind === "repo" && notGitOpsCodes.includes(error.code) ? (
+          <NotGitOps error={error} onOpen={(path) => void open(path)} onPickAnother={() => void api.pickFolder().then(open)} />
+        ) : (
+          error && <ErrorBox error={error} />
+        )}
         {info && info.recentRepos.length > 0 && (
           <section className="recent">
             <h2>Recent</h2>

@@ -81,3 +81,14 @@ export function repoRelative(path: string, repoRoot: string): string {
   const root = repoRoot.replace(/\\/g, "/").replace(/\/+$/, "");
   return p.startsWith(root + "/") ? p.slice(root.length + 1) : p;
 }
+
+/** A next step for errors people can fix themselves, such as a local system that isn't running. */
+export function hintFor(error: AppError, target?: Target): string | null {
+  if (error.code === "unreachable" && target?.endpoint && /^https?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/.test(target.endpoint)) {
+    return target.name === "dev"
+      ? "The dev mock isn't running. Start it with `docker compose up -d` in the repository (or see Quick start in the README), then Re-plan."
+      : `Nothing is answering on ${target.endpoint}. Start that system, then Re-plan.`;
+  }
+  if (error.code === "token_missing") return "Add the token in Settings; the engine restarts to pick it up.";
+  return null;
+}

@@ -1,4 +1,4 @@
-import { affectedTargets, repoRelative, columns, formatValue, health, relativeTime, shortId, targetOfPath, tokenNames } from "./model";
+import { affectedTargets, hintFor, repoRelative, columns, formatValue, health, relativeTime, shortId, targetOfPath, tokenNames } from "./model";
 import { demoTargets } from "./demo";
 import type { Plan } from "./types";
 import planFixture from "../fixtures/plan.json";
@@ -61,4 +61,14 @@ it("makes engine paths relative to the repository", () => {
   expect(repoRelative("/home/me/gitops/config/dev/users/bret.json", "/home/me/gitops")).toBe("config/dev/users/bret.json");
   expect(repoRelative("C:\\r\\config\\dev\\a.json", "C:\\r\\")).toBe("config/dev/a.json");
   expect(repoRelative("config/dev/a.json", "/elsewhere")).toBe("config/dev/a.json");
+});
+
+it("suggests starting a local system that isn't answering", () => {
+  const dev = demoTargets.find((t) => t.name === "dev")!;
+  const prod = demoTargets.find((t) => t.name === "prod")!;
+  const unreachable = { kind: "engine" as const, code: "unreachable", message: "x" };
+  expect(hintFor(unreachable, dev)).toContain("docker compose up -d");
+  expect(hintFor(unreachable, { ...dev, name: "staging" })).toContain("Nothing is answering on http://127.0.0.1:3000");
+  expect(hintFor(unreachable, prod)).toBeNull();
+  expect(hintFor({ ...unreachable, code: "api" }, dev)).toBeNull();
 });

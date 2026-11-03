@@ -55,3 +55,11 @@ it("offers apply only for targets that allow it", async () => {
   await screen.findByRole("tab", { name: "Plan" });
   expect(screen.queryByText("Apply…")).toBeNull();
 });
+
+it("explains a folder that isn't a GitOps repository instead of failing", async () => {
+  render(<App />);
+  fireEvent.click(await screen.findByText("/demo/inventory-manager"));
+  expect(await screen.findByText("inventory-manager isn't a GitOps repository")).toBeTruthy();
+  expect(screen.getByText(/"repository": "emmanuelalozie\/inventory-manager"/)).toBeTruthy();
+  expect(screen.getByText("Choose another folder…")).toBeTruthy();
+});

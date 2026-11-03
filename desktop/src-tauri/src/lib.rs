@@ -8,6 +8,7 @@ mod engine;
 mod error;
 mod git;
 mod github;
+mod repo_check;
 mod secrets;
 mod settings;
 mod watcher;
@@ -131,15 +132,9 @@ fn app_info(state: State<'_, AppState>) -> AppInfo {
 
 #[tauri::command]
 async fn open_repo(app: AppHandle, state: State<'_, AppState>, path: String) -> Result<RepoInfo> {
-    // dunce, not std: on Windows std gives \\?\C:\... paths, which Java and some git builds refuse.
-    let repo = dunce::canonicalize(PathBuf::from(&path))
-        .map_err(|e| AppError::repo(format!("Can't open {path}: {e}")))?;
-    if !repo.join("config").is_dir() {
-        return Err(AppError::repo(format!(
-            "{} has no config/ folder, so it isn't a GitOps repository (one target per config/<name>/target.json).",
-            repo.display()
-        )));
-    }
+    // Plain C:\... paths on Windows (Java and some git builds refuse \\?\C:\...).
+    let repo = repo_check::resolve(&path)?;
+    repo_check::check(&repo)?;
     let git = git::status(&repo)?;
     let (engine, engine_info) = start_engine(&app, &state, &repo).await?;
     let handle = app.clone();

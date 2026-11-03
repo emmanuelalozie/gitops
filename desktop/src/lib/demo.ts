@@ -178,8 +178,13 @@ export const demo = {
     const result = await (async (): Promise<unknown> => {
       switch (command) {
         case "app_info":
-          return { version: "demo", recentRepos: [repo.path], openRepo: null };
+          return { version: "demo", recentRepos: [repo.path, "/demo/inventory-manager"], openRepo: null };
         case "open_repo":
+          if (String(args.path).endsWith("inventory-manager")) {
+            throw { kind: "repo", code: "not_gitops",
+              message: "inventory-manager is a regular project, not a GitOps repository. The app opens a repository that describes live systems in config/<target>/target.json, such as your gitops repository.",
+              details: { path: args.path, name: "inventory-manager", github: { owner: "emmanuelalozie", name: "inventory-manager" } } };
+          }
           return delay(repo, 300);
         case "close_repo":
           return null;

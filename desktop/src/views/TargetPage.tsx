@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { api, asAppError } from "../lib/api";
-import { columns, formatValue, health, relativeTime, type Load } from "../lib/model";
+import { columns, formatValue, health, hintFor, relativeTime, type Load } from "../lib/model";
 import type { Resource, Target } from "../lib/types";
 import { PlanView } from "../components/PlanView";
-import { Empty, ErrorBox, HealthBadge, Spinner, Tabs, Tag } from "../components/ui";
+import { Empty, ErrorBox, HealthBadge, Hint, Spinner, Tabs, Tag } from "../components/ui";
 import { useRepo } from "../state";
 import { ApplyDialog } from "../components/ApplyDialog";
 import { ConfigTab } from "./ConfigTab";
@@ -52,7 +52,7 @@ export function TargetPage({ name }: { name: string }) {
         <section>
           {(!plan || plan.state === "idle") && <Empty title="Not planned yet" />}
           {plan?.state === "loading" && (plan.previous ? <div className="stale"><Spinner label="Re-planning…" /><PlanView plan={plan.previous} /></div> : <Spinner label="Asking the live system…" />)}
-          {plan?.state === "error" && <ErrorBox error={plan.error} />}
+          {plan?.state === "error" && <ErrorBox error={plan.error} action={<Hint text={hintFor(plan.error, target)} />} />}
           {plan?.state === "ok" && (
             <>
               <p className="muted small">

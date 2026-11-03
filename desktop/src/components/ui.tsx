@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { healthLabel, type Health } from "../lib/model";
 import type { AppError, Problem } from "../lib/types";
+import { inline } from "../lib/markdown";
 
 export function HealthBadge({ health }: { health: Health }) {
   return (
@@ -68,6 +69,7 @@ function headline(error: AppError): string {
     case "not_allowed": return "Not allowed";
     case "engine_stopped": return "The engine stopped";
     case "engine_missing": return "The engine isn't installed";
+    case "invalid_repo": return "That folder can't be opened";
     default: return "Something went wrong";
   }
 }
@@ -90,5 +92,15 @@ export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { id: 
         </button>
       ))}
     </div>
+  );
+}
+
+/** A one-line next step; `code` in backticks is shown as code. */
+export function Hint({ text }: { text: string | null }) {
+  if (!text) return null;
+  return (
+    <p className="hint-line">
+      {inline(text).map((p, i) => (p.type === "code" ? <code key={i}>{p.text}</code> : p.type === "break" ? <br key={i} /> : <span key={i}>{p.text}</span>))}
+    </p>
   );
 }

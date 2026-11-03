@@ -1,6 +1,6 @@
-import { health, relativeTime } from "../lib/model";
+import { health, hintFor, relativeTime } from "../lib/model";
 import type { Target } from "../lib/types";
-import { Counts, ErrorBox, HealthBadge, Spinner, Tag } from "../components/ui";
+import { Counts, ErrorBox, HealthBadge, Hint, Spinner, Tag } from "../components/ui";
 import { useRepo } from "../state";
 
 export function Overview() {
@@ -55,7 +55,12 @@ function TargetCard({ target }: { target: Target }) {
         {plan?.state === "ok" && plan.value.unmanaged.length > 0 && (
           <span className="muted">{plan.value.unmanaged.length} unmanaged</span>
         )}
-        {plan?.state === "error" && <span className="error-text" title={plan.error.message}>{plan.error.code}: {plan.error.message.split("\n")[0]}</span>}
+        {plan?.state === "error" && (
+          <div>
+            <span className="error-text" title={plan.error.message}>{plan.error.code}: {plan.error.message.split("\n")[0]}</span>
+            <Hint text={hintFor(plan.error, target)} />
+          </div>
+        )}
         {plan?.state === "loading" && <Spinner />}
       </div>
       <footer className="card-foot">
