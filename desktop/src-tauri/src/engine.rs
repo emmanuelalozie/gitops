@@ -34,6 +34,10 @@ pub const ALLOWED_METHODS: &[&str] = &[
     "resource.write",
     "resource.delete",
     "repo.lint",
+    // A target's local mock API ("mock" in target.json), run by the engine and stopped when it exits.
+    "mock.status",
+    "mock.start",
+    "mock.stop",
     // Only for targets with "localApply": true, and only with the id of the plan the person approved.
     // The engine enforces both; engine_call checks localApply too, before the request leaves the app.
     "plan.apply",
@@ -234,7 +238,12 @@ impl Engine {
                 return Err(AppError::new("engine", "engine_stopped", format!("Couldn't write to the engine: {e}")));
             }
         }
-        let limit = if method == "plan.apply" { Duration::from_secs(30 * 60) } else { Duration::from_secs(120) };
+        // Applies may take long; starting a mock may first download json-server.
+        let limit = match method {
+            "plan.apply" => Duration::from_secs(30 * 60),
+            "mock.start" => Duration::from_secs(5 * 60),
+            _ => Duration::from_secs(120),
+        };
         match tokio::time::timeout(limit, receiver).await {
             Ok(Ok(result)) => result,
             Ok(Err(_)) => Err(stopped(&self.stderr_tail(), &self.describe)),

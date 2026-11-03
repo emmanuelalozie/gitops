@@ -2,6 +2,7 @@ import { health, hintFor, relativeTime } from "../lib/model";
 import type { Target } from "../lib/types";
 import { Counts, ErrorBox, HealthBadge, Hint, Spinner, Tag } from "../components/ui";
 import { useRepo } from "../state";
+import { MockControl } from "../components/MockControl";
 
 export function Overview() {
   const { targets, plans, planAll } = useRepo();
@@ -63,6 +64,7 @@ function TargetCard({ target }: { target: Target }) {
         )}
         {plan?.state === "loading" && <Spinner />}
       </div>
+      {target.mock && <MockControl target={target} compact />}
       <footer className="card-foot">
         <div className="tags">
           <Tag>{target.resources} in Git</Tag>

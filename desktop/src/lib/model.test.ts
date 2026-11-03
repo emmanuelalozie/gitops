@@ -67,8 +67,8 @@ it("suggests starting a local system that isn't answering", () => {
   const dev = demoTargets.find((t) => t.name === "dev")!;
   const prod = demoTargets.find((t) => t.name === "prod")!;
   const unreachable = { kind: "engine" as const, code: "unreachable", message: "x" };
-  expect(hintFor(unreachable, dev)).toContain("docker compose up -d");
-  expect(hintFor(unreachable, { ...dev, name: "staging" })).toContain("Nothing is answering on http://127.0.0.1:3000");
+  expect(hintFor(unreachable, dev)).toContain("Start mock");
+  expect(hintFor(unreachable, { ...dev, mock: null })).toContain("Nothing is answering on http://127.0.0.1:3000");
   expect(hintFor(unreachable, prod)).toBeNull();
   expect(hintFor({ ...unreachable, code: "api" }, dev)).toBeNull();
 });

@@ -6,6 +6,7 @@ import { PlanView } from "../components/PlanView";
 import { Empty, ErrorBox, HealthBadge, Hint, Spinner, Tabs, Tag } from "../components/ui";
 import { useRepo } from "../state";
 import { ApplyDialog } from "../components/ApplyDialog";
+import { MockControl } from "../components/MockControl";
 import { ConfigTab } from "./ConfigTab";
 import { HistoryTab } from "./HistoryTab";
 
@@ -29,6 +30,7 @@ export function TargetPage({ name }: { name: string }) {
           </h1>
           <p className="muted">{target.description}</p>
           <TargetFacts target={target} />
+          {target.mock && <MockControl target={target} />}
         </div>
         <div className="head-actions">
           {canApply && <button className="danger" onClick={() => setApplying(true)}>Apply…</button>}

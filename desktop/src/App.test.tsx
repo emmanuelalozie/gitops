@@ -63,3 +63,17 @@ it("explains a folder that isn't a GitOps repository instead of failing", async 
   expect(screen.getByText(/"repository": "emmanuelalozie\/inventory-manager"/)).toBeTruthy();
   expect(screen.getByText("Choose another folder…")).toBeTruthy();
 });
+
+it("starts a stopped mock and re-plans the targets that use it", async () => {
+  render(<App />);
+  fireEvent.click(await screen.findByText("Open a repository…"));
+  const nav = await screen.findByRole("navigation");
+  fireEvent.click(await within(nav).findByText("dev"));
+  fireEvent.click(await screen.findByText("Stop", {}, { timeout: 3000 }));
+  expect(await screen.findByText("Start mock", {}, { timeout: 3000 })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Re-plan" }));
+  expect(await screen.findByText(/Press Start mock/, {}, { timeout: 3000 })).toBeTruthy();
+  fireEvent.click(screen.getByText("Start mock"));
+  expect(await screen.findByText("mock running", {}, { timeout: 3000 })).toBeTruthy();
+  await waitFor(() => expect(screen.queryByText(/Press Start mock/)).toBeNull(), { timeout: 3000 });
+});

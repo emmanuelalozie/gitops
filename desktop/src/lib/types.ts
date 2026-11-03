@@ -54,6 +54,8 @@ export interface Target {
   verifyAfterApply: boolean;
   localApply: boolean;
   workflows: boolean;
+  /** The seed of the target's local mock API (such as mock/db.json), when it has one. */
+  mock?: string | null;
   tokenVariable: string | null;
   tokenRequired: boolean;
   tokenPresent: boolean;
@@ -255,4 +257,14 @@ export interface RunsData {
   runs: WorkflowRun[];
   dispatchable: { file: string; name: string }[];
   tokenPresent: boolean;
+}
+
+export interface MockStatus {
+  target: string;
+  configured: boolean;
+  seed?: string;
+  url?: string;
+  running?: boolean;
+  startedHere?: boolean;
+  via?: string | null;
 }

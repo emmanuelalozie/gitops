@@ -85,9 +85,8 @@ export function repoRelative(path: string, repoRoot: string): string {
 /** A next step for errors people can fix themselves, such as a local system that isn't running. */
 export function hintFor(error: AppError, target?: Target): string | null {
   if (error.code === "unreachable" && target?.endpoint && /^https?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/.test(target.endpoint)) {
-    return target.name === "dev"
-      ? "The dev mock isn't running. Start it with `docker compose up -d` in the repository (or see Quick start in the README), then Re-plan."
-      : `Nothing is answering on ${target.endpoint}. Start that system, then Re-plan.`;
+    if (target.mock) return "Its mock API isn't running. Press Start mock; the plan runs again once it's up.";
+    return `Nothing is answering on ${target.endpoint}. Start that system (for a mock, \`docker compose up -d\` in the repository), then Re-plan.`;
   }
   if (error.code === "token_missing") return "Add the token in Settings; the engine restarts to pick it up.";
   return null;

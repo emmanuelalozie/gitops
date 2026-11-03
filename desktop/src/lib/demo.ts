@@ -34,7 +34,7 @@ const target = (t: Partial<Target> & Pick<Target, "name" | "kind" | "keyField">)
 
 export const demoTargets: Target[] = [
   target({ name: "dev", kind: "users", keyField: "username", endpoint: "http://127.0.0.1:3000", prune: true, localApply: true,
-    workflows: false, resources: 10, description: "Development users API: the json-server mock in mock/." }),
+    workflows: false, resources: 10, mock: "mock/db.json", description: "Development users API: the json-server mock in mock/." }),
   target({ name: "github", kind: "labels", keyField: "name", endpoint: "emmanuelalozie/gitops", tokenVariable: "GITHUB_TOKEN",
     resources: 3, description: "Issue labels of this repository. Labels not listed here are left alone." }),
   target({ name: "github-branches", kind: "branch-protection", keyField: "branch", endpoint: "emmanuelalozie/gitops",
@@ -54,10 +54,14 @@ function emptyPlan(t: Target): Plan {
 }
 
 let devApplied = false;
+let mockRunning = true;
 
 function plan(name: string): Plan {
   const t = demoTargets.find((x) => x.name === name);
   if (!t) throw { kind: "engine", code: "usage", message: `No target '${name}'` };
+  if (t.mock && !mockRunning) {
+    throw { kind: "engine", code: "unreachable", message: `can't connect to the live system: GET ${t.endpoint}/users (ConnectException). Is it running?` };
+  }
   if (name === "dev") return devApplied ? emptyPlan(t) : (planFixture as Plan);
   if (t.tokenRequired) {
     return { ...emptyPlan(t), skipped: true, planId: null, skipReason: `'${name}' needs a token in ${t.tokenVariable}, which isn't set.` };
@@ -118,6 +122,15 @@ async function engineCall(method: string, params: Record<string, unknown>): Prom
     }
     case "targets.compare":
       return { ...(planFixture as Plan), planId: null, target: `${params.from} -> ${params.to}`, description: "users in Git", from: params.from, to: params.to };
+    case "mock.status":
+    case "mock.start":
+    case "mock.stop": {
+      const t = demoTargets.find((x) => x.name === params.target);
+      if (!t?.mock) return { target: params.target, configured: false };
+      if (method === "mock.start") { await delay(null, 600); mockRunning = true; devApplied = false; }
+      if (method === "mock.stop") mockRunning = false;
+      return { target: t.name, configured: true, seed: t.mock, url: t.endpoint, running: mockRunning, startedHere: mockRunning, via: mockRunning ? "Node.js" : null };
+    }
     case "plan.apply": {
       const target = String(params.target);
       if (target !== "dev") throw { kind: "engine", code: "not_allowed", message: `'${target}' changes through pull requests, not from this app` };

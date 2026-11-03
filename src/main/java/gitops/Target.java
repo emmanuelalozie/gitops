@@ -125,6 +125,12 @@ public record Target(String name, Path dir, Kind kind, boolean prune, boolean ve
         node.put("prune", prune);
         node.put("verifyAfterApply", verifyAfterApply);
         node.put("localApply", localApply());
+        String mock = settings.path("mock").asText("");
+        if (mock.isBlank()) {
+            node.putNull("mock");
+        } else {
+            node.put("mock", mock);
+        }
         node.put("workflows", workflows());
         boolean tokenRequired = settings.path("tokenRequired").asBoolean(false);
         if (tokenVariable() != null) {

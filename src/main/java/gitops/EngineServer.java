@@ -47,9 +47,12 @@ public final class EngineServer {
         return thread;
     });
     private final Map<String, ReentrantLock> targetLocks = new ConcurrentHashMap<>();
+    private final Mocks mocks;
 
     EngineServer(Engine engine, InputStream in, OutputStream out) {
         this.engine = engine;
+        Path parent = engine.configRoot().toAbsolutePath().normalize().getParent();
+        this.mocks = new Mocks(parent == null ? Path.of(".") : parent);
         this.in = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
         this.out = new PrintStream(out, false, StandardCharsets.UTF_8);
     }
@@ -72,6 +75,9 @@ public final class EngineServer {
 
     /** Reads requests until stdin closes, then waits for running requests (an apply finishes) and returns. */
     int serve() {
+        // Mocks started here stop with the server, also when it's interrupted.
+        Thread cleanup = new Thread(mocks::stopAll, "stop-mocks");
+        Runtime.getRuntime().addShutdownHook(cleanup);
         try {
             String line;
             while ((line = in.readLine()) != null) {
@@ -101,6 +107,12 @@ public final class EngineServer {
                 workers.awaitTermination(10, TimeUnit.MINUTES);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+            }
+            mocks.stopAll();
+            try {
+                Runtime.getRuntime().removeShutdownHook(cleanup);
+            } catch (IllegalStateException e) {
+                // already shutting down
             }
         }
         return Main.OK;
@@ -140,6 +152,9 @@ public final class EngineServer {
             case "resource.delete" -> locked(required(params, "target"), () -> engine.deleteResource(
                     engine.target(required(params, "target")), required(params, "key")));
             case "repo.lint" -> Lint.run(engine);
+            case "mock.status" -> mocks.status(engine.target(required(params, "target")));
+            case "mock.start" -> mocks.start(engine.target(required(params, "target")));
+            case "mock.stop" -> mocks.stop(engine.target(required(params, "target")));
             default -> throw new MethodNotFound(method);
         };
     }
