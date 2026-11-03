@@ -16,6 +16,7 @@ const users: Resource[] = [
 ];
 
 const target = (t: Partial<Target> & Pick<Target, "name" | "kind" | "keyField">): Target => ({
+  type: t.kind === "users" ? "users" : "github",
   description: "",
   endpoint: null,
   prune: false,
@@ -93,8 +94,10 @@ async function engineCall(method: string, params: Record<string, unknown>): Prom
       return delay(plan(String(params.target)), 400);
     case "live.fetch":
       return { resources: users.map((u, i) => ({ ...u, website: `site${i}.example` })) };
-    case "kind.schema":
-      return schemas[String(params.kind)] ?? { type: "object", properties: {} };
+    case "kind.schema": {
+      const kind = params.target ? demoTargets.find((t) => t.name === params.target)?.kind : params.kind;
+      return schemas[String(kind)] ?? { type: "object", properties: {} };
+    }
     case "resource.check":
       return { ok: true, problems: [] };
     case "resources.list":

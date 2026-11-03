@@ -61,6 +61,11 @@ public final class ConfigValidator {
             problems.add(new Problem(null, "", e.getMessage()));
         }
 
+        if (target.settings().path("tokenRequired").asBoolean(false) && target.tokenVariable() == null) {
+            problems.add(new Problem(null, "", target.dir().resolve(Target.FILE)
+                    + " sets \"tokenRequired\" but not \"tokenEnv\": name the environment variable that holds the token"));
+        }
+
         if (!Files.isDirectory(target.resourceDir())) {
             problems.add(new Problem(null, "", target.resourceDir()
                     + " does not exist. An empty target would delete everything live, so create the folder on purpose."));

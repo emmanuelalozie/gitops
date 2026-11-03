@@ -27,6 +27,8 @@ export interface Plan {
   target: string;
   description: string;
   kind: string;
+  /** users, github or rest (a rest target's kind is its resource, such as "items"). */
+  type?: "users" | "github" | "rest";
   keyField: string;
   skipped: boolean;
   skipReason?: string;
@@ -42,6 +44,7 @@ export interface Plan {
 export interface Target {
   name: string;
   kind: string;
+  type: "users" | "github" | "rest";
   keyField: string;
   description: string;
   endpoint: string | null;

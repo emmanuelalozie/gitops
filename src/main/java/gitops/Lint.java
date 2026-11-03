@@ -48,7 +48,7 @@ public final class Lint {
         ArrayNode requirements = root.putArray("requirements");
 
         for (Target target : engine.targets()) {
-            if (target.kind() != Kind.BRANCH_PROTECTION) {
+            if (!target.kind().equals(Kind.BRANCH_PROTECTION)) {
                 continue;
             }
             for (Path file : target.store().files()) {

@@ -103,8 +103,8 @@ function LiveState({ target }: { target: Target }) {
     );
   };
   useEffect(() => {
-    void api.schema(target.kind).then((s) => setManaged(Object.keys((s.properties as Record<string, unknown>) ?? {}))).catch(() => undefined);
-  }, [target.kind]);
+    void api.schema(target.name).then((s) => setManaged(Object.keys((s.properties as Record<string, unknown>) ?? {}))).catch(() => undefined);
+  }, [target.name]);
 
   if (live.state === "idle") {
     return (

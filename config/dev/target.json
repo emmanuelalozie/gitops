@@ -5,5 +5,6 @@
   "prune": true,
   "verifyAfterApply": true,
   "localApply": true,
-  "workflows": false
+  "workflows": false,
+  "mock": "mock/db.json"
 }

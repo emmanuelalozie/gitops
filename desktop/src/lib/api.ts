@@ -59,7 +59,8 @@ export const api = {
   plan: (target: string) => engine<Plan>("plan.compute", { target }),
   fetchLive: (target: string) => engine<{ resources: Resource[] }>("live.fetch", { target }).then((r) => r.resources),
   compare: (from: string, to: string) => engine<Plan>("targets.compare", { from, to }),
-  schema: (kind: string) => engine<Record<string, Json>>("kind.schema", { kind }),
+  /** The schema of a target's resources (a rest target has its own). */
+  schema: (target: string) => engine<Record<string, Json>>("kind.schema", { target }),
   checkResource: (target: string, resource: Resource, previousKey?: string) =>
     engine<{ ok: boolean; problems: Problem[] }>("resource.check", { target, resource, previousKey }),
   lint: () => engine<Lint>("repo.lint"),

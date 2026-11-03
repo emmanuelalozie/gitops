@@ -28,8 +28,8 @@ export function ConfigTab({ target }: { target: Target }) {
     void load();
   }, [target.name, revision]);
   useEffect(() => {
-    void api.schema(target.kind).then((s) => setFields(fieldsOf(s)));
-  }, [target.kind]);
+    void api.schema(target.name).then((s) => setFields(fieldsOf(s)));
+  }, [target.name]);
 
   if (entries.state === "loading" || entries.state === "idle") return <Spinner label="Reading config…" />;
   if (entries.state === "error") return <ErrorBox error={entries.error} />;

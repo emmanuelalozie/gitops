@@ -64,20 +64,23 @@ public final class Demo {
             }
             System.out.println("The mock is up.");
             Main main = new Main(System.out, System.err);
-            step("1. Plan: the mock starts out edited by hand, so Git and the live state differ");
-            if (main.run(new String[] {"plan", "--target", "dev"}) != Main.OK) {
-                return Main.ERROR;
+            // dev manages the mock's users with a built-in kind; dev-inventory its items with the generic rest kind.
+            for (String target : List.of("dev", "dev-inventory")) {
+                step("1. Plan " + target + ": the mock starts out edited by hand, so Git and the live state differ");
+                if (main.run(new String[] {"plan", "--target", target}) != Main.OK) {
+                    return Main.ERROR;
+                }
+                step("2. Apply " + target + ": make the mock match Git, then check that it does");
+                if (main.run(new String[] {"apply", "--target", target}) != Main.OK) {
+                    return Main.ERROR;
+                }
+                step("3. Drift check on " + target + ": fails if anything still differs");
+                int drift = main.run(new String[] {"plan", "--target", target, "--fail-on-drift"});
+                if (drift != Main.OK) {
+                    return drift;
+                }
             }
-            step("2. Apply: make the mock match Git, then check that it does");
-            if (main.run(new String[] {"apply", "--target", "dev"}) != Main.OK) {
-                return Main.ERROR;
-            }
-            step("3. Drift check: fails if anything still differs");
-            int drift = main.run(new String[] {"plan", "--target", "dev", "--fail-on-drift"});
-            if (drift != Main.OK) {
-                return drift;
-            }
-            step("Done. Edit a file in config/dev/users and run ./gradlew demo again to see your change planned and applied.");
+            step("Done. Edit a file in config/dev/users or config/dev-inventory/items and run ./gradlew demo again to see your change planned and applied.");
             return Main.OK;
         } finally {
             mock.stop();

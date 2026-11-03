@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Inventory item",
+  "description": "An item in the inventory API. One file per item in config/dev-inventory/items/, named after its SKU.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "The API's id, used in its URLs."
+    },
+    "sku": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}-[0-9]{3}$",
+      "description": "Stock keeping unit, such as WID-001."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "quantity": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "location": {
+      "type": "string",
+      "pattern": "^[A-Z][0-9]+$",
+      "description": "Aisle and shelf, such as A1."
+    }
+  },
+  "required": [
+    "id",
+    "sku",
+    "name",
+    "quantity",
+    "location"
+  ],
+  "additionalProperties": false
+}

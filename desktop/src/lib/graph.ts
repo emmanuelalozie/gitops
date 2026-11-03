@@ -50,7 +50,7 @@ export function layoutGraph(targets: Target[], lint: Lint | null, health: (targe
   for (const t of sorted) {
     add({ id: `target:${t.name}`, column: 3, label: t.name, sub: t.kind, tone: health(t.name), target: t.name });
     const live = `live:${t.endpoint ?? t.name}`;
-    add({ id: live, column: 4, label: t.endpoint ?? "(no endpoint)", sub: t.kind === "users" ? "users API" : "GitHub", tone: "neutral" });
+    add({ id: live, column: 4, label: t.endpoint ?? "(no endpoint)", sub: t.type === "github" ? "GitHub" : t.type === "rest" ? "REST API" : "users API", tone: "neutral" });
     edge(`target:${t.name}`, live);
   }
   for (const r of lint?.requirements ?? []) {

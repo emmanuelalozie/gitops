@@ -40,6 +40,7 @@ public final class PlanJson {
         root.put("target", plan.target());
         root.put("description", plan.description());
         root.put("kind", kind.id());
+        root.put("type", kind.type());
         root.put("keyField", kind.keyField());
         root.put("skipped", false);
         root.put("planId", id(plan, kind));
@@ -77,6 +78,7 @@ public final class PlanJson {
         root.put("target", target.name());
         root.put("description", target.describe());
         root.put("kind", target.kind().id());
+        root.put("type", target.kind().type());
         root.put("keyField", target.kind().keyField());
         root.put("skipped", true);
         root.put("skipReason", reason);

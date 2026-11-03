@@ -3,6 +3,7 @@
   "target": "dev",
   "description": "users @ http://127.0.0.1:3000",
   "kind": "users",
+  "type": "users",
   "keyField": "username",
   "skipped": false,
   "planId": "8f9fd60b75ee9d255d9848050edfa8a925eca649449a44e79207e02c5fa68bb2",

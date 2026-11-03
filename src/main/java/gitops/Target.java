@@ -5,7 +5,9 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import gitops.providers.GitHubBranchProtectionProvider;
 import gitops.providers.GitHubLabelsProvider;
 import gitops.providers.GitHubRepositoryProvider;
+import gitops.providers.GitHubActionsVariablesProvider;
 import gitops.providers.Provider;
+import gitops.providers.RestProvider;
 import gitops.providers.UsersProvider;
 
 import java.io.IOException;
@@ -38,11 +40,38 @@ public record Target(String name, Path dir, Kind kind, boolean prune, boolean ve
             throw new IllegalArgumentException("No target '" + name + "': " + file + " does not exist");
         }
         ObjectNode settings = Json.readObject(file);
-        Kind kind = Kind.fromId(settings.path("kind").asText());
+        Kind kind = "rest".equals(settings.path("kind").asText()) ? restKind(dir, settings) : Kind.fromId(settings.path("kind").asText());
         return new Target(name, dir, kind,
                 settings.path("prune").asBoolean(false),
                 settings.path("verifyAfterApply").asBoolean(true),
                 settings);
+    }
+
+    /**
+     * The kind a {@code rest} target defines: "resource" (the collection, and its folder), "key" (default: the
+     * id field), "idField" (default "id") and "schema" (default "&lt;resource&gt;.schema.json" next to target.json).
+     */
+    static Kind restKind(Path dir, ObjectNode settings) {
+        String where = dir.resolve(FILE).toString();
+        String resource = settings.path("resource").asText("");
+        if (resource.isBlank()) {
+            throw new IllegalArgumentException(where + " must set \"resource\" for a rest target, such as \"items\"");
+        }
+        String idField = settings.path("idField").asText("id");
+        String key = settings.path("key").asText(idField);
+        Path schemaFile = dir.resolve(settings.path("schema").asText(resource + ".schema.json")).normalize();
+        if (!schemaFile.startsWith(dir.normalize())) {
+            throw new IllegalArgumentException(where + ": \"schema\" must be a file inside " + dir);
+        }
+        if (!Files.isRegularFile(schemaFile)) {
+            throw new IllegalArgumentException(where + ": the schema " + schemaFile + " doesn't exist. A rest target needs a"
+                    + " JSON Schema for its resources; only the fields it declares are managed.");
+        }
+        try {
+            return Kind.rest(resource, key, idField, Json.readObject(schemaFile));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException(where + ": " + e.getMessage(), e);
+        }
     }
 
     public static List<Target> loadAll(Path configRoot) {
@@ -72,7 +101,7 @@ public record Target(String name, Path dir, Kind kind, boolean prune, boolean ve
 
     /** Whether this kind of target talks to GitHub (and so sends a token when there is one). */
     public boolean usesGitHub() {
-        return kind != Kind.USERS;
+        return kind.family() == Kind.Family.GITHUB;
     }
 
     /** Everything a program needs to know about the target, without contacting the live system. */
@@ -80,6 +109,7 @@ public record Target(String name, Path dir, Kind kind, boolean prune, boolean ve
         ObjectNode node = Json.MAPPER.createObjectNode();
         node.put("name", name);
         node.put("kind", kind.id());
+        node.put("type", kind.type());
         node.put("keyField", kind.keyField());
         node.put("description", description());
         try {
@@ -87,7 +117,7 @@ public record Target(String name, Path dir, Kind kind, boolean prune, boolean ve
         } catch (IllegalArgumentException e) {
             node.putNull("endpoint");
         }
-        if (kind == Kind.USERS) {
+        if (kind.family() != Kind.Family.GITHUB) {
             node.put("endpointVariable", baseUrlVariable());
             node.put("endpointOverridden", System.getenv(baseUrlVariable()) != null
                     && !System.getenv(baseUrlVariable()).isBlank());
@@ -97,7 +127,7 @@ public record Target(String name, Path dir, Kind kind, boolean prune, boolean ve
         node.put("localApply", localApply());
         node.put("workflows", workflows());
         boolean tokenRequired = settings.path("tokenRequired").asBoolean(false);
-        if (usesGitHub() || tokenRequired || settings.hasNonNull("tokenEnv")) {
+        if (tokenVariable() != null) {
             node.put("tokenVariable", tokenVariable());
         } else {
             node.putNull("tokenVariable");
@@ -128,16 +158,22 @@ public record Target(String name, Path dir, Kind kind, boolean prune, boolean ve
 
     /** Where the target points, after applying environment-variable overrides. */
     public String endpoint() {
-        return switch (kind) {
-            case USERS -> envOr(baseUrlVariable(), setting("baseUrl"));
-            case LABELS, REPOSITORY, BRANCH_PROTECTION -> setting("repository");
+        return switch (kind.family()) {
+            case USERS_API, REST -> envOr(baseUrlVariable(), setting("baseUrl"));
+            case GITHUB -> setting("repository");
         };
     }
 
-    /** The environment variable holding this target's GitHub token: "tokenEnv" in target.json, or GITHUB_TOKEN. */
+    /**
+     * The environment variable holding this target's token: "tokenEnv" in target.json, or GITHUB_TOKEN for GitHub
+     * kinds. Other APIs get a token only when tokenEnv names one, so a GitHub token never goes anywhere else.
+     */
     public String tokenVariable() {
         String configured = settings.path("tokenEnv").asText("");
-        return configured.isBlank() ? "GITHUB_TOKEN" : configured;
+        if (!configured.isBlank()) {
+            return configured;
+        }
+        return usesGitHub() ? "GITHUB_TOKEN" : null;
     }
 
     /** True when target.json sets "tokenRequired" and the token variable is empty. */
@@ -146,17 +182,31 @@ public record Target(String name, Path dir, Kind kind, boolean prune, boolean ve
     }
 
     private String token() {
-        return envOr(tokenVariable(), null);
+        return tokenVariable() == null ? null : envOr(tokenVariable(), null);
     }
 
     public Provider provider() {
         String github = envOr("GITHUB_API_URL", "https://api.github.com");
-        return switch (kind) {
-            case USERS -> new UsersProvider(endpoint());
-            case LABELS -> new GitHubLabelsProvider(github, endpoint(), token());
-            case REPOSITORY -> new GitHubRepositoryProvider(github, endpoint(), token());
-            case BRANCH_PROTECTION -> new GitHubBranchProtectionProvider(github, endpoint(), token());
-        };
+        if (kind.family() == Kind.Family.REST) {
+            return new RestProvider(endpoint(), settings.path("path").asText("/" + kind.id()),
+                    settings.path("idField").asText("id"), settings.path("updateMethod").asText("PATCH"), token());
+        }
+        if (kind.equals(Kind.USERS)) {
+            return new UsersProvider(endpoint());
+        }
+        if (kind.equals(Kind.LABELS)) {
+            return new GitHubLabelsProvider(github, endpoint(), token());
+        }
+        if (kind.equals(Kind.REPOSITORY)) {
+            return new GitHubRepositoryProvider(github, endpoint(), token());
+        }
+        if (kind.equals(Kind.BRANCH_PROTECTION)) {
+            return new GitHubBranchProtectionProvider(github, endpoint(), token());
+        }
+        if (kind.equals(Kind.ACTIONS_VARIABLES)) {
+            return new GitHubActionsVariablesProvider(github, endpoint(), token());
+        }
+        throw new IllegalStateException("No provider for kind " + kind);
     }
 
     public String describe() {

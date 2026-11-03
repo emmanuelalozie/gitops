@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/emmanuelalozie/gitops/schemas/actions-variables.schema.json",
+  "title": "GitHub Actions variable",
+  "description": "A repository variable that workflows read as vars.NAME. One file per variable in config/<target>/actions-variables/. GitHub stores names in upper case, so they are written in upper case here too.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[A-Z_][A-Z0-9_]*$",
+      "not": { "pattern": "^GITHUB_" },
+      "description": "Upper-case letters, digits and underscores; can't start with a digit or GITHUB_."
+    },
+    "value": { "type": "string", "minLength": 1, "maxLength": 48000 }
+  },
+  "required": ["name", "value"],
+  "additionalProperties": false
+}

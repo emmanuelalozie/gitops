@@ -158,7 +158,7 @@ public final class Engine {
     public ObjectNode compare(String fromName, String toName) {
         Target from = target(fromName);
         Target to = target(toName);
-        if (from.kind() != to.kind()) {
+        if (!from.kind().equals(to.kind())) {
             throw new IllegalArgumentException("Can't compare '" + fromName + "' (" + from.kind().id() + ") with '"
                     + toName + "' (" + to.kind().id() + "): they manage different kinds");
         }
@@ -189,8 +189,9 @@ public final class Engine {
         return root;
     }
 
-    public JsonNode schema(String kindId) {
-        return Kind.fromId(kindId).schema();
+    /** The schema of a target's kind (a rest target has its own), or of a built-in kind by id. */
+    public JsonNode schema(String targetName, String kindId) {
+        return targetName != null ? target(targetName).kind().schema() : Kind.fromId(kindId).schema();
     }
 
     /**
