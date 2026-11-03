@@ -1,0 +1,141 @@
+// The engine's JSON (docs/engine-protocol.md, schema version 1) and the Rust commands' results.
+// src/fixtures/*.json are written by the engine's own tests; types.test.ts checks they still fit these types.
+
+export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
+export type Resource = { [field: string]: Json };
+
+export type Action = "create" | "update" | "delete";
+
+export interface FieldDiff {
+  field: string;
+  live: Json;
+  liveMissing: boolean;
+  desired: Json;
+}
+
+export interface Change {
+  action: Action;
+  key: string;
+  replace: boolean;
+  desired: Resource | null;
+  live: Resource | null;
+  diffs: FieldDiff[];
+}
+
+export interface Plan {
+  schemaVersion: 1;
+  target: string;
+  description: string;
+  kind: string;
+  keyField: string;
+  skipped: boolean;
+  skipReason?: string;
+  planId: string | null;
+  hasChanges: boolean;
+  summary: Record<Action, number>;
+  changes: Change[];
+  unmanaged: string[];
+  from?: string;
+  to?: string;
+}
+
+export interface Target {
+  name: string;
+  kind: string;
+  keyField: string;
+  description: string;
+  endpoint: string | null;
+  endpointVariable?: string;
+  endpointOverridden?: boolean;
+  prune: boolean;
+  verifyAfterApply: boolean;
+  localApply: boolean;
+  workflows: boolean;
+  tokenVariable: string | null;
+  tokenRequired: boolean;
+  tokenPresent: boolean;
+  dir: string;
+  resourceDir: string;
+  resources: number;
+}
+
+export interface Problem {
+  file: string | null;
+  pointer: string;
+  message: string;
+}
+
+export interface Validation {
+  ok: boolean;
+  targets: { name: string; kind: string; files: number; ok: boolean; problems: Problem[] }[];
+}
+
+export interface LintFinding {
+  severity: "warning" | "error";
+  code: string;
+  target: string;
+  file: string;
+  pointer: string;
+  message: string;
+}
+
+export interface Lint {
+  ok: boolean;
+  findings: LintFinding[];
+  requirements: { target: string; branch: string; file: string; check: string; satisfiedBy: { workflow: string; job: string; file: string }[] }[];
+  checks: { workflow: string; file: string; job: string; name: string; onPullRequest: boolean }[];
+}
+
+export interface EngineVersion {
+  engineVersion: string;
+  schemaVersion: number;
+  java: string;
+  alive?: boolean;
+}
+
+export interface GitHubRepo {
+  owner: string;
+  name: string;
+}
+
+export interface RepoStatus {
+  branch: string | null;
+  github: GitHubRepo | null;
+  defaultBranch: string | null;
+  shallow: boolean;
+}
+
+export interface RepoInfo {
+  path: string;
+  name: string;
+  git: RepoStatus;
+  engine: EngineVersion;
+}
+
+export interface AppInfo {
+  version: string;
+  recentRepos: string[];
+  openRepo: string | null;
+}
+
+export interface TokenStatus {
+  name: string;
+  present: boolean;
+}
+
+/** Every error from a command: the engine's codes (invalid_config, plan_changed, ...) come through as-is. */
+export interface AppError {
+  kind: "engine" | "git" | "github" | "keychain" | "repo" | "io" | "internal";
+  code: string;
+  message: string;
+  details?: Json & { problems?: Problem[] };
+}
+
+export interface ApplyProgress {
+  requestId: number;
+  target: string;
+  key: string;
+  step: "delete" | "delete-to-replace" | "update" | "create" | "create-replacement";
+  state: "starting" | "finished" | "failed";
+  error?: AppError;
+}

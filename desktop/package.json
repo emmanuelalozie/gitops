@@ -1,0 +1,32 @@
+{
+  "name": "gitops-desktop",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "description": "Desktop visualizer for the GitOps engine: targets, plans, drift, history and pull requests.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "engine": "node scripts/engine.mjs",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.12.4",
+    "@tauri-apps/plugin-dialog": "^2.8.4",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.4",
+    "@testing-library/react": "^16.3.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "jsdom": "^26.1.0",
+    "typescript": "~5.9.3",
+    "vite": "^6.4.0",
+    "vitest": "^3.2.4"
+  }
+}

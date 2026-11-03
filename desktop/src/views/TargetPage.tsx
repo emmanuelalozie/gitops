@@ -1,0 +1,125 @@
+import { useEffect, useState } from "react";
+import { api, asAppError } from "../lib/api";
+import { columns, formatValue, health, relativeTime, type Load } from "../lib/model";
+import type { Resource, Target } from "../lib/types";
+import { PlanView } from "../components/PlanView";
+import { Empty, ErrorBox, HealthBadge, Spinner, Tabs, Tag } from "../components/ui";
+import { useRepo } from "../state";
+
+type Tab = "plan" | "live";
+
+export function TargetPage({ name }: { name: string }) {
+  const { targets, plans, planTarget, page, go } = useRepo();
+  const target = targets.state === "ok" ? targets.value.find((t) => t.name === name) : undefined;
+  if (!target) return <Empty title={`No target '${name}'`}>It may have been removed from config/.</Empty>;
+  const plan = plans[name];
+  const tab = ((page.name === "target" && page.tab) || "plan") as Tab;
+
+  return (
+    <div className="page">
+      <header className="page-head">
+        <div>
+          <h1>
+            {target.name} <HealthBadge health={health(plan)} />
+          </h1>
+          <p className="muted">{target.description}</p>
+          <TargetFacts target={target} />
+        </div>
+        <button onClick={() => void planTarget(name)} disabled={plan?.state === "loading"}>Re-plan</button>
+      </header>
+      <Tabs<Tab>
+        tabs={[{ id: "plan", label: "Plan" }, { id: "live", label: "Live state" }]}
+        value={tab}
+        onChange={(t) => go({ name: "target", target: name, tab: t })}
+      />
+      {tab === "plan" && (
+        <section>
+          {(!plan || plan.state === "idle") && <Empty title="Not planned yet" />}
+          {plan?.state === "loading" && (plan.previous ? <div className="stale"><Spinner label="Re-planning…" /><PlanView plan={plan.previous} /></div> : <Spinner label="Asking the live system…" />)}
+          {plan?.state === "error" && <ErrorBox error={plan.error} />}
+          {plan?.state === "ok" && (
+            <>
+              <p className="muted small">Planned {relativeTime(plan.at)} against <code>{target.endpoint}</code>.</p>
+              <PlanView plan={plan.value} />
+            </>
+          )}
+        </section>
+      )}
+      {tab === "live" && <LiveState target={target} />}
+    </div>
+  );
+}
+
+function TargetFacts({ target }: { target: Target }) {
+  return (
+    <div className="facts">
+      <Tag>{target.kind}</Tag>
+      <Tag title={target.endpointOverridden ? `Overridden by ${target.endpointVariable}` : undefined}>
+        {target.endpoint}{target.endpointOverridden ? " (overridden)" : ""}
+      </Tag>
+      <Tag tone={target.prune ? "warn" : "neutral"}>{target.prune ? "prune on" : "prune off"}</Tag>
+      <Tag>{target.verifyAfterApply ? "verifies after apply" : "no verification"}</Tag>
+      <Tag tone={target.localApply ? "info" : "neutral"}>{target.localApply ? "apply from this app" : "applies through pull requests"}</Tag>
+      {target.tokenVariable && (
+        <Tag tone={target.tokenPresent ? "ok" : target.tokenRequired ? "danger" : "neutral"}>
+          {target.tokenVariable}: {target.tokenPresent ? "set" : "not set"}
+        </Tag>
+      )}
+    </div>
+  );
+}
+
+/** Everything the live system returns; the fields Git manages come first and are marked. */
+function LiveState({ target }: { target: Target }) {
+  const [live, setLive] = useState<Load<Resource[]>>({ state: "idle" });
+  const [managed, setManaged] = useState<string[]>([]);
+
+  const fetch = () => {
+    setLive({ state: "loading" });
+    api.fetchLive(target.name).then(
+      (value) => setLive({ state: "ok", value, at: Date.now() }),
+      (error) => setLive({ state: "error", error: asAppError(error) }),
+    );
+  };
+  useEffect(() => {
+    void api.schema(target.kind).then((s) => setManaged(Object.keys((s.properties as Record<string, unknown>) ?? {}))).catch(() => undefined);
+  }, [target.kind]);
+
+  if (live.state === "idle") {
+    return (
+      <Empty title="Live state isn't loaded">
+        <p>This reads everything the live system returns for {target.kind}.</p>
+        <button onClick={fetch}>Fetch live state</button>
+      </Empty>
+    );
+  }
+  if (live.state === "loading") return <Spinner label="Fetching…" />;
+  if (live.state === "error") return <ErrorBox error={live.error} action={<button onClick={fetch}>Try again</button>} />;
+  const cols = columns(live.value, managed);
+  return (
+    <section>
+      <p className="muted small">
+        {live.value.length} {target.kind}, fetched {relativeTime(live.at)}. <span className="managed-key">Managed</span> columns are compared with Git; the rest are ignored.{" "}
+        <button className="link" onClick={fetch}>Refresh</button>
+      </p>
+      <div className="table-wrap">
+        <table className="grid">
+          <thead>
+            <tr>{cols.map((c) => <th key={c} className={managed.includes(c) ? "managed" : undefined}>{c}</th>)}</tr>
+          </thead>
+          <tbody>
+            {live.value.map((r, i) => (
+              <tr key={i}>
+                {cols.map((c) => (
+                  <td key={c} className={managed.includes(c) ? "managed" : undefined}>
+                    <code>{c in r ? (typeof r[c] === "string" ? String(r[c]) : formatValue(r[c])) : ""}</code>
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}

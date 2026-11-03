@@ -1,0 +1,36 @@
+[package]
+name = "gitops-desktop"
+version = "0.2.0"
+description = "Desktop visualizer for the GitOps engine"
+edition = "2021"
+rust-version = "1.77"
+publish = false
+
+[lib]
+name = "gitops_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7", features = [] }
+
+[dependencies]
+tauri = { version = "2.12", features = [] }
+tauri-plugin-dialog = "2.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["sync", "time", "macros"] }
+thiserror = "2"
+notify = "8.2"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+# Tokens live in the OS keychain: Keychain on macOS, Credential Manager on Windows, Secret Service on Linux.
+keyring = { version = "3.6", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust", "vendored"] }
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["rt", "macros"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
