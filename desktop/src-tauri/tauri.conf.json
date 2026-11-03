@@ -27,10 +27,23 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": [
+      "deb",
+      "rpm",
+      "nsis",
+      "msi",
+      "app",
+      "dmg"
+    ],
     "category": "DeveloperTool",
     "shortDescription": "See, plan and propose changes to systems managed from Git",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
     "resources": {
       "../../build/engine/": "engine/"
     }
