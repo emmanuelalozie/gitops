@@ -61,7 +61,7 @@ Exit codes: 0 success, 1 error, 2 drift with `--fail-on-drift`, 3 plan changed.
 }
 ```
 
-`desired` and `live` hold managed fields only (those in the kind's schema). `replace` marks an update the
+`type` is `users`, `github` or `rest`; for a `rest` target `kind` is its resource (such as `items`). `desired` and `live` hold managed fields only (those in the kind's schema). `replace` marks an update the
 provider makes by deleting and creating the resource (a user whose `id` changes). A target skipped for a
 missing token has `skipped: true`, `skipReason`, `planId: null` and no changes.
 
@@ -91,11 +91,15 @@ Requests run in parallel on a small pool; anything that changes a target (`plan.
 | `live.fetch` | `target` | `{resources: [...]}` (everything the live system returns) |
 | `targets.compare` | `from`, `to` | a plan that would make `to`'s Git config match `from`'s, plus `from` and `to` |
 | `resources.list` | `target` | `{resources: [{key, file, resource}]}` from Git; an unreadable file has `error` and `resource: null` |
-| `kind.schema` | `kind` | the kind's JSON Schema |
+| `kind.schema` | `target` (or `kind` for a built-in kind) | the JSON Schema of the target's resources; a `rest` target has its own |
 | `resource.check` | `target`, `resource`, `previousKey?` | `{ok, problems}`: schema, duplicate key, unique fields |
 | `resource.write` | `target`, `resource`, `previousKey?` | `{file, removed: [...]}`; writes in the canonical file format, refuses invalid resources |
 | `resource.delete` | `target`, `key` | `{file, removed}` |
 | `repo.lint` | | as `lint --format json` |
+| `targets.create` | `name`, `settings`, `schema?` | the new target, as in `targets.list`; writes `config/<name>/target.json` (and a `rest` target's schema), never overwriting, and removes what it wrote if it doesn't load |
+| `targets.snapshot` | `target` | `{written, before, dir}`: the live state written into Git |
+| `rest.inferSchema` | `baseUrl`, `path` | `{schema}`: a first JSON Schema from what the collection returns now |
+| `mock.status`, `mock.start`, `mock.stop` | `target` | `{configured, seed, url, running, startedHere, via}`; only for targets with `mock`. Start waits until the mock serves; stop only stops what this server started; everything it started stops when it exits |
 
 During `plan.apply`, the server sends `apply.progress` notifications:
 

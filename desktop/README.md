@@ -54,6 +54,7 @@ The protocol between Rust and the engine is in [docs/engine-protocol.md](../docs
 | `engine.rs` | Finds the engine (`GITOPS_ENGINE_DIR`, the copy bundled with the app, or the repository's `build/engine`), starts it, matches responses to requests by id, forwards `apply.progress`, and fails every waiting call with the engine's last stderr lines if it dies. Refuses an engine whose JSON `schemaVersion` it doesn't know. |
 | `lib.rs` | The commands the frontend may call, and the app state (one open repository and its engine). |
 | `git.rs` | Status, diffs, history, discard and propose, through the `git` command. |
+| `repo_check.rs` | Whether a folder can be opened, and if not why: inside a GitOps repository, no targets yet, or a regular project. |
 | `github.rs` | Pull requests, checks, plan comments, drift issues, workflow runs and dispatch, cached by ETag. |
 | `secrets.rs` | Tokens in the OS keychain. |
 | `watcher.rs` | Watches `config/` and `.github/workflows/`, and reports bursts of changes once. |
@@ -90,11 +91,17 @@ The app is built so that opening it, or clicking around, can't change a live sys
   `https://github.com/` links can be opened. The CSP allows no remote scripts, styles, images or connections,
   and the Markdown of a plan comment is rendered as text, never as HTML.
 - **Open repositories you trust.** A repository's `target.json` decides where the engine sends requests, as
-  it does for the command line.
+  it does for the command line, and a target's `mock` makes **Start mock** run `npx json-server` (code from
+  npm) on your machine. Nothing starts until you press it.
+- **Tokens stay with their system.** A `rest` target never receives `GITHUB_TOKEN`; it gets only the token its
+  `tokenEnv` names.
+- **Notifications** are plain text sent through a Rust command; the page has no notification permission.
 
 ## Limits
 
 - One repository at a time; one engine per repository.
+- The drift watch runs only while the app is open (there's no tray or background service). For drift found
+  while it's closed, rely on the daily Drift workflow and its issues (and `DRIFT_WEBHOOK_URL`).
 - Pull requests, issues and runs are read from the first page (50 pull requests, 100 drift issues, the last
   21 drift runs). History in a shallow clone stops at the clone's depth.
 - Starting a workflow and opening pull requests need `GITHUB_TOKEN` with access to the repository
