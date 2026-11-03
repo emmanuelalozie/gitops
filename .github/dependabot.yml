@@ -21,6 +21,11 @@ updates:
     groups:
       desktop-npm:
         patterns: ['*']
+    # Major versions of the app's build tools and libraries (TypeScript, Vite, Tauri...) change how they're
+    # configured, so they're upgraded on purpose, by hand, not proposed weekly. Minor and patch updates still come.
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
   - package-ecosystem: cargo
     directory: /desktop/src-tauri
     schedule:
@@ -28,3 +33,8 @@ updates:
     groups:
       desktop-cargo:
         patterns: ['*']
+    # Major versions of the app's build tools and libraries (TypeScript, Vite, Tauri...) change how they're
+    # configured, so they're upgraded on purpose, by hand, not proposed weekly. Minor and patch updates still come.
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
