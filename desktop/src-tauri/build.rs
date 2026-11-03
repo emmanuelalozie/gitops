@@ -25,6 +25,10 @@ const COMMANDS: &[&str] = &[
     "watch_settings",
     "set_watch_settings",
     "notify",
+    "revert_change",
+    "blame_field",
+    "audit_log",
+    "github_workflow_runs",
 ];
 
 fn main() {

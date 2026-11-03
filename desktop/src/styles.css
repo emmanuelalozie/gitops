@@ -350,6 +350,20 @@ button.cell { cursor: pointer; }
 
 .watch-row { display: flex; gap: 16px; align-items: center; margin-bottom: 8px; }
 
+.search-box { padding: 10px 12px 0; }
+.search-box input { width: 100%; }
+.search-results { list-style: none; padding: 0; display: grid; gap: 10px; }
+.hit-fields { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
+mark { background: var(--update-bg); color: var(--text); border-radius: 2px; }
+.chip-link { margin-right: 6px; }
+.audit td { white-space: normal; vertical-align: top; }
+.combined-target { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; }
+.combined-head { display: flex; gap: 10px; align-items: center; width: 100%; border: none; background: none; text-align: left; padding: 10px 14px; flex-wrap: wrap; }
+.combined-body { padding: 0 14px 12px; }
+.why { padding: 6px 12px 10px; border-top: 1px solid var(--border); }
+.why p { margin: 4px 0; }
+.revert-row { margin-bottom: 8px; }
+
 @media (prefers-reduced-motion: reduce) {
   .spin, .health-loading .dot, .dot.health-loading { animation: none; }
 }

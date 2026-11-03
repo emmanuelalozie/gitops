@@ -16,6 +16,8 @@ export interface FieldDiff {
 export interface Change {
   action: Action;
   key: string;
+  /** The resource's file in Git (where it is, or would be). */
+  file?: string;
   replace: boolean;
   desired: Resource | null;
   live: Resource | null;
@@ -56,6 +58,13 @@ export interface Target {
   workflows: boolean;
   /** The seed of the target's local mock API (such as mock/db.json), when it has one. */
   mock?: string | null;
+  /** The GitHub environment whose reviewers approve this target's apply. */
+  environment?: string;
+  /** Who reviews changes to this target (CODEOWNERS). */
+  owners?: string[];
+  applyWindow?: { describe: string; open: boolean; nextOpening: string } | null;
+  /** The URL checked after an apply. */
+  healthCheck?: string | null;
   tokenVariable: string | null;
   tokenRequired: boolean;
   tokenPresent: boolean;
@@ -175,6 +184,14 @@ export interface Proposal {
   labels?: string[];
 }
 
+export interface HealthResult {
+  ok: boolean;
+  url: string;
+  status: number;
+  message: string;
+  seconds: number;
+}
+
 export interface ApplyResult {
   target: string;
   planId: string;
@@ -182,6 +199,9 @@ export interface ApplyResult {
   verified: boolean;
   verifyAfterApply: boolean;
   after: Plan | null;
+  /** Why nothing was applied: the target is outside its apply window. */
+  deferred?: string | null;
+  health?: HealthResult | null;
 }
 
 export interface ProposeResult {
@@ -233,6 +253,7 @@ export interface WorkflowRun {
   status: string;
   conclusion: string | null;
   branch: string;
+  sha?: string;
   createdAt: string;
   url: string;
   jobs?: WorkflowJob[];
@@ -272,4 +293,30 @@ export interface MockStatus {
 export interface WatchSettings {
   enabled: boolean;
   minutes: number;
+}
+
+export interface Blame {
+  field: string;
+  line: string;
+  commit: Commit | null;
+}
+
+export interface AuditEntry extends Commit {
+  targets: string[];
+  files: string[];
+}
+
+export interface SearchHit {
+  target: string;
+  kind: string;
+  key: string;
+  file: string;
+  fields: string[];
+  resource: Resource;
+}
+
+export interface SearchResult {
+  query: string;
+  results: SearchHit[];
+  truncated: boolean;
 }

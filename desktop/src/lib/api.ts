@@ -2,7 +2,7 @@
 // (npm run dev, or screenshots) they go to the demo backend in demo.ts, which serves the fixtures.
 
 import type {
-  AppError, AppInfo, ApplyResult, Commit, MockStatus, WatchSettings, ConfigChange, DriftData, EngineVersion, Json, Lint, Plan, Problem, Proposal, ProposeResult,
+  AppError, AppInfo, ApplyResult, AuditEntry, Blame, Commit, HealthResult, MockStatus, SearchResult, WatchSettings, WorkflowRun, ConfigChange, DriftData, EngineVersion, Json, Lint, Plan, Problem, Proposal, ProposeResult,
   PullDetails, PullRequest, RepoInfo, RepoStatus, Resource, ResourceEntry, RunsData, Target, TokenStatus, Validation,
 } from "./types";
 import { demo } from "./demo";
@@ -69,6 +69,8 @@ export const api = {
   snapshot: (target: string) => engine<{ written: number; before: number; dir: string }>("targets.snapshot", { target }),
   inferSchema: (baseUrl: string, path: string) =>
     engine<{ schema: Record<string, Json> }>("rest.inferSchema", { baseUrl, path }).then((r) => r.schema),
+  search: (query: string, limit = 100) => engine<SearchResult>("resources.search", { query, limit }),
+  healthCheck: (target: string) => engine<HealthResult | null>("health.check", { target }),
   mockStatus: (target: string) => engine<MockStatus>("mock.status", { target }),
   startMock: (target: string) => engine<MockStatus>("mock.start", { target }),
   stopMock: (target: string) => engine<MockStatus>("mock.stop", { target }),
@@ -84,6 +86,10 @@ export const api = {
   history: (path: string, limit = 100) => call<Commit[]>("file_history", { path, limit }),
   commitDiff: (sha: string, path: string) => call<string>("commit_diff", { sha, path }),
   propose: (proposal: Proposal) => call<ProposeResult>("propose", { proposal }),
+  revertChange: (sha: string, subject: string) => call<ProposeResult>("revert_change", { sha, subject }),
+  blameField: (path: string, field: string) => call<Blame>("blame_field", { path, field }),
+  audit: (limit = 50) => call<AuditEntry[]>("audit_log", { limit }),
+  workflowRuns: (workflow: string, limit = 30) => call<WorkflowRun[]>("github_workflow_runs", { workflow, limit }),
   watchSettings: () => call<WatchSettings>("watch_settings"),
   setWatchSettings: (enabled: boolean, minutes: number) => call<WatchSettings>("set_watch_settings", { enabled, minutes }),
   notify: (title: string, body: string) => call<void>("notify", { title, body }),

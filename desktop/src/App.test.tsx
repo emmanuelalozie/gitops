@@ -101,3 +101,48 @@ it("watches for drift and notifies only about changes", async () => {
   // The first look is the baseline: dev already drifts, so nothing is new.
   expect(notifications).toEqual([]);
 });
+
+describe("operations views", () => {
+  async function open() {
+    render(<App />);
+    fireEvent.click(await screen.findByText("Open a repository…"));
+    return screen.findByRole("navigation");
+  }
+
+  it("reverts a past change as a pull request", async () => {
+    const nav = await open();
+    fireEvent.click(await within(nav).findByText("dev"));
+    fireEvent.click(await screen.findByRole("tab", { name: "History" }));
+    fireEvent.click(await screen.findByText(/Add Moriah.Stanton to dev/));
+    fireEvent.click(await screen.findByText("Revert this change…"));
+    fireEvent.click(screen.getByRole("button", { name: "Open pull request" }));
+    expect(await screen.findByText(/gitops\/revert-a1b2c3d/)).toBeTruthy();
+  });
+
+  it("explains why Git has a value", async () => {
+    const nav = await open();
+    fireEvent.click(await within(nav).findByText("dev"));
+    fireEvent.click((await screen.findAllByText("Why does Git say this?", {}, { timeout: 3000 }))[0]!);
+    expect(await screen.findByText(/set to this in/)).toBeTruthy();
+  });
+
+  it("searches every target", async () => {
+    await open();
+    fireEvent.change(screen.getByLabelText("Search resources in every target"), { target: { value: "anton" } });
+    expect(await screen.findByText("Antonette")).toBeTruthy();
+    expect(screen.getByText("Anton")).toBeTruthy(); // highlighted where it matched
+  });
+
+  it("shows the audit trail with apply results", async () => {
+    const nav = await open();
+    fireEvent.click(within(nav).getByText("Audit"));
+    expect(await screen.findByText(/Merge pull request #14/)).toBeTruthy();
+    expect(screen.getAllByText(/prod ✓/).length).toBeGreaterThan(0);
+  });
+
+  it("combines every target's plan", async () => {
+    const nav = await open();
+    fireEvent.click(within(nav).getByText("All changes"));
+    await waitFor(() => expect(screen.getByText(/across 1 of/)).toBeTruthy(), { timeout: 3000 });
+  });
+});

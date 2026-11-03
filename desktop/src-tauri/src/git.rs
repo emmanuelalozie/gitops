@@ -347,6 +347,159 @@ pub fn propose(repo: &Path, proposal: &Proposal) -> Result<Proposed> {
     })
 }
 
+fn check_sha(sha: &str) -> Result<()> {
+    if sha.len() < 7 || sha.len() > 64 || !sha.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(AppError::new("git", "invalid_sha", format!("'{sha}' isn't a commit id")));
+    }
+    Ok(())
+}
+
+/// Opens a branch that undoes one past change to config/ (a merge of a pull request included), pushes it and goes
+/// back to the branch you were on. Refuses commits that touch anything outside config/, and stops cleanly if
+/// later changes conflict. Your uncommitted config edits must be committed or discarded first.
+pub fn revert(repo: &Path, sha: &str, branch: &str) -> Result<Proposed> {
+    check_sha(sha)?;
+    let branch = branch.trim();
+    if branch.starts_with('-') || run(repo, &["check-ref-format", "--branch", branch]).is_err() {
+        return Err(AppError::new("git", "invalid_branch", format!("'{branch}' isn't a valid branch name")));
+    }
+    if run(repo, &["rev-parse", "--verify", "--quiet", &format!("refs/heads/{branch}")]).is_ok() {
+        return Err(AppError::new("git", "branch_exists", format!("A branch named '{branch}' already exists")));
+    }
+    if !config_changes(repo)?.is_empty() {
+        return Err(AppError::new("git", "dirty", "Commit or discard your changes under config/ before reverting one"));
+    }
+    if run(repo, &["merge-base", "--is-ancestor", sha, "HEAD"]).is_err() {
+        return Err(AppError::new("git", "not_ancestor", "That commit isn't part of the branch you're on"));
+    }
+    let parents = run(repo, &["rev-list", "--parents", "-n", "1", sha])?.split_whitespace().count() - 1;
+    let files = if parents > 1 {
+        run(repo, &["diff", "--name-only", &format!("{sha}^1"), sha])?
+    } else {
+        run(repo, &["show", "--name-only", "--format=", sha])?
+    };
+    let outside: Vec<&str> = files.lines().filter(|f| !f.is_empty() && !f.starts_with("config/")).collect();
+    if !outside.is_empty() {
+        return Err(AppError::new(
+            "git",
+            "outside_config",
+            format!("That commit also changes {} outside config/, so revert it by hand", outside.join(", ")),
+        ));
+    }
+    let from_branch = run(repo, &["symbolic-ref", "--quiet", "--short", "HEAD"])
+        .map(|b| b.trim().to_string())
+        .map_err(|_| AppError::new("git", "detached_head", "Check out a branch first"))?;
+    run(repo, &["switch", "-c", branch])?;
+    let mut args = vec!["revert", "--no-edit"];
+    if parents > 1 {
+        args.extend(["-m", "1"]);
+    }
+    args.push(sha);
+    if let Err(e) = run(repo, &args) {
+        let _ = run(repo, &["revert", "--abort"]);
+        let _ = run(repo, &["switch", &from_branch]);
+        let _ = run(repo, &["branch", "-D", branch]);
+        return Err(AppError::new(
+            "git",
+            "conflict",
+            format!("Later changes touched the same lines, so it can't be undone automatically: {}", e.message),
+        ));
+    }
+    let commit = run(repo, &["rev-parse", "HEAD"])?.trim().to_string();
+    let push = run_with_timeout(repo, &["push", "--set-upstream", "origin", branch], Duration::from_secs(120));
+    run(repo, &["switch", &from_branch])?;
+    Ok(Proposed { branch: branch.to_string(), commit, from_branch, pushed: push.is_ok(), push_error: push.err().map(|e| e.message) })
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Blame {
+    pub field: String,
+    pub line: String,
+    /// Null when the line is an uncommitted edit.
+    pub commit: Option<Commit>,
+}
+
+/// Which commit last set a field of a config file (the line `  "field": ...`, as the engine writes them).
+pub fn blame_field(repo: &Path, path: &str, field: &str) -> Result<Blame> {
+    check_config_path(path)?;
+    let text = std::fs::read_to_string(repo.join(path))?;
+    let needle = format!("  {}:", serde_json::to_string(field)?);
+    let (number, line) = text
+        .lines()
+        .enumerate()
+        .find(|(_, l)| l.starts_with(&needle))
+        .ok_or_else(|| AppError::new("git", "no_field", format!("{path} has no top-level \"{field}\"")))?;
+    let range = format!("{},{}", number + 1, number + 1);
+    let out = run(repo, &["blame", "--porcelain", "-L", &range, "--", path])?;
+    let mut lines = out.lines();
+    let sha = lines.next().unwrap_or_default().split(' ').next().unwrap_or_default().to_string();
+    if sha.chars().all(|c| c == '0') {
+        return Ok(Blame { field: field.to_string(), line: line.trim().to_string(), commit: None });
+    }
+    let mut author = String::new();
+    let mut time = 0i64;
+    let mut subject = String::new();
+    for l in lines {
+        if let Some(v) = l.strip_prefix("author ") {
+            author = v.to_string();
+        } else if let Some(v) = l.strip_prefix("author-time ") {
+            time = v.parse().unwrap_or(0);
+        } else if let Some(v) = l.strip_prefix("summary ") {
+            subject = v.to_string();
+        }
+    }
+    let date = run(repo, &["show", "-s", "--format=%aI", &sha]).map(|d| d.trim().to_string()).unwrap_or_else(|_| time.to_string());
+    Ok(Blame {
+        field: field.to_string(),
+        line: line.trim().to_string(),
+        commit: Some(Commit { short: sha[..7.min(sha.len())].to_string(), sha, author, date, pull_request: pull_request_number(&subject), subject }),
+    })
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditEntry {
+    #[serde(flatten)]
+    pub commit: Commit,
+    pub targets: Vec<String>,
+    pub files: Vec<String>,
+}
+
+/// Config changes on the current branch's mainline, newest first: each merge (a pull request) or direct commit
+/// once, with the targets and files it changed.
+pub fn audit(repo: &Path, limit: usize) -> Result<Vec<AuditEntry>> {
+    let limit = limit.clamp(1, 500).to_string();
+    let out = run(repo, &["log", "--first-parent", "-m", "-n", &limit, "--name-only", "--format=%x1e%H%x1f%h%x1f%an%x1f%aI%x1f%s", "--", "config"])?;
+    let mut entries = Vec::new();
+    for record in out.split('\u{1e}').filter(|r| !r.trim().is_empty()) {
+        let mut lines = record.lines();
+        let header = lines.next().unwrap_or_default();
+        let fields: Vec<&str> = header.split('\u{1f}').collect();
+        let [sha, short, author, date, subject] = fields[..] else { continue };
+        let files: Vec<String> = lines.map(str::trim).filter(|l| l.starts_with("config/")).map(String::from).collect();
+        let mut targets: Vec<String> = files.iter().filter_map(|f| target_of(f)).collect();
+        targets.sort();
+        targets.dedup();
+        if entries.iter().any(|e: &AuditEntry| e.commit.sha == sha) {
+            continue;
+        }
+        entries.push(AuditEntry {
+            commit: Commit {
+                sha: sha.to_string(),
+                short: short.to_string(),
+                author: author.to_string(),
+                date: date.to_string(),
+                subject: subject.to_string(),
+                pull_request: pull_request_number(subject),
+            },
+            targets,
+            files,
+        });
+    }
+    Ok(entries)
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
@@ -502,6 +655,76 @@ pub(crate) mod tests {
         assert_eq!(bad("ok", vec!["README.md"]), "invalid_path");
         assert_eq!(run(p, &["symbolic-ref", "--short", "HEAD"]).unwrap().trim(), "develop");
         assert_eq!(config_changes(p).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn revert_undoes_a_config_change_on_a_new_branch() {
+        let dir = repo();
+        let p = dir.path();
+        let remote = tempfile::tempdir().unwrap();
+        run(remote.path(), &["init", "-q", "--bare"]).unwrap();
+        run(p, &["remote", "add", "origin", remote.path().to_str().unwrap()]).unwrap();
+        std::fs::write(p.join("config/dev/users/bret.json"), "{\"username\": \"Bert\"}\n").unwrap();
+        run(p, &["commit", "-q", "-am", "Rename Bret (#3)"]).unwrap();
+        let sha = run(p, &["rev-parse", "HEAD"]).unwrap().trim().to_string();
+
+        let reverted = revert(p, &sha, "gitops/revert-rename").unwrap();
+
+        assert!(reverted.pushed, "{:?}", reverted.push_error);
+        assert_eq!(run(p, &["symbolic-ref", "--short", "HEAD"]).unwrap().trim(), "develop");
+        let content = run(p, &["show", "gitops/revert-rename:config/dev/users/bret.json"]).unwrap();
+        assert_eq!(content, "{\"username\": \"Bret\"}\n");
+        assert!(run(p, &["log", "-1", "--format=%s", "gitops/revert-rename"]).unwrap().starts_with("Revert \"Rename Bret"));
+    }
+
+    #[test]
+    fn revert_refuses_what_it_cant_do_safely() {
+        let dir = repo();
+        let p = dir.path();
+        std::fs::write(p.join("README.md"), "x\n").unwrap();
+        std::fs::write(p.join("config/dev/users/bret.json"), "{}\n").unwrap();
+        run(p, &["add", "-A"]).unwrap();
+        run(p, &["commit", "-q", "-m", "Mixed change"]).unwrap();
+        let sha = run(p, &["rev-parse", "HEAD"]).unwrap().trim().to_string();
+        assert_eq!(revert(p, &sha, "r1").unwrap_err().code, "outside_config");
+        assert_eq!(revert(p, "nothex!", "r2").unwrap_err().code, "invalid_sha");
+        std::fs::write(p.join("config/dev/users/bret.json"), "dirty\n").unwrap();
+        assert_eq!(revert(p, &sha, "r3").unwrap_err().code, "dirty");
+        assert_eq!(run(p, &["symbolic-ref", "--short", "HEAD"]).unwrap().trim(), "develop");
+    }
+
+    #[test]
+    fn blame_names_the_commit_that_set_a_field() {
+        let dir = repo();
+        let p = dir.path();
+        std::fs::write(p.join("config/dev/users/bret.json"), "{\n  \"username\": \"Bret\",\n  \"email\": \"a@b.io\"\n}\n").unwrap();
+        run(p, &["commit", "-q", "-am", "Set Bret's email (#9)"]).unwrap();
+        std::fs::write(p.join("config/dev/users/bret.json"), "{\n  \"username\": \"Bret\",\n  \"email\": \"c@d.io\"\n}\n").unwrap();
+
+        let committed = blame_field(p, "config/dev/users/bret.json", "username").unwrap();
+        assert_eq!(committed.commit.unwrap().pull_request, Some(9));
+        let edited = blame_field(p, "config/dev/users/bret.json", "email").unwrap();
+        assert!(edited.commit.is_none(), "an uncommitted edit has no commit yet");
+        assert_eq!(blame_field(p, "config/dev/users/bret.json", "phone").unwrap_err().code, "no_field");
+    }
+
+    #[test]
+    fn audit_lists_mainline_changes_with_their_targets() {
+        let dir = repo();
+        let p = dir.path();
+        run(p, &["switch", "-q", "-c", "feature"]).unwrap();
+        std::fs::create_dir_all(p.join("config/prod/users")).unwrap();
+        std::fs::write(p.join("config/prod/users/a.json"), "{}\n").unwrap();
+        std::fs::write(p.join("config/dev/users/bret.json"), "{}\n").unwrap();
+        run(p, &["add", "-A"]).unwrap();
+        run(p, &["commit", "-q", "-m", "Feature work"]).unwrap();
+        run(p, &["switch", "-q", "develop"]).unwrap();
+        run(p, &["merge", "-q", "--no-ff", "feature", "-m", "Merge pull request #21 from me/feature"]).unwrap();
+
+        let entries = audit(p, 10).unwrap();
+        assert_eq!(entries.len(), 2, "the merge and the first commit, not the feature commit itself");
+        assert_eq!(entries[0].commit.pull_request, Some(21));
+        assert_eq!(entries[0].targets, vec!["dev".to_string(), "prod".to_string()]);
     }
 
     #[test]

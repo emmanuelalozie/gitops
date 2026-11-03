@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { repoRelative, type Load } from "../lib/model";
-import type { AppError, Commit, ResourceEntry, Target } from "../lib/types";
+import type { AppError, Commit, ProposeResult, ResourceEntry, Target } from "../lib/types";
 import { DiffText } from "../components/DiffText";
 import { ErrorBox, Spinner } from "../components/ui";
 import { useRepo } from "../state";
@@ -14,6 +14,23 @@ export function HistoryTab({ target }: { target: Target }) {
   const [commits, setCommits] = useState<Load<Commit[]>>({ state: "loading" });
   const [selected, setSelected] = useState<Commit | null>(null);
   const [diff, setDiff] = useState<Load<string>>({ state: "idle" });
+  const [reverting, setReverting] = useState(false);
+  const [confirmRevert, setConfirmRevert] = useState(false);
+  const [reverted, setReverted] = useState<ProposeResult | null>(null);
+  const [revertError, setRevertError] = useState<AppError | null>(null);
+
+  const revert = async (c: Commit) => {
+    setConfirmRevert(false);
+    setReverting(true);
+    setRevertError(null);
+    try {
+      setReverted(await api.revertChange(c.sha, c.subject));
+    } catch (e) {
+      setRevertError(e as AppError);
+    } finally {
+      setReverting(false);
+    }
+  };
 
   useEffect(() => {
     void api.resources(target.name).then(setResources, () => setResources([]));
@@ -77,6 +94,30 @@ export function HistoryTab({ target }: { target: Target }) {
             {!selected && <p className="muted">Choose a commit to see what it changed.</p>}
             {diff.state === "loading" && <Spinner />}
             {diff.state === "error" && <ErrorBox error={diff.error} />}
+            {selected && (
+              <div className="revert-row">
+                {confirmRevert ? (
+                  <span className="confirm">
+                    Open a pull request that undoes <code>{selected.short}</code>?
+                    <button className="primary" onClick={() => void revert(selected)}>Open pull request</button>
+                    <button onClick={() => setConfirmRevert(false)}>Cancel</button>
+                  </span>
+                ) : (
+                  <button onClick={() => setConfirmRevert(true)} disabled={reverting}>{reverting ? "Reverting…" : "Revert this change…"}</button>
+                )}
+              </div>
+            )}
+            {revertError && <ErrorBox error={revertError} />}
+            {reverted && (
+              <p className="notice" role="status">
+                Pushed <code>{reverted.proposed.branch}</code>.{" "}
+                {reverted.pullRequest ? (
+                  <button className="link" onClick={() => void api.openUrl(reverted.pullRequest!.url)}>Pull request #{reverted.pullRequest.number}</button>
+                ) : reverted.compareUrl ? (
+                  <button className="link" onClick={() => void api.openUrl(reverted.compareUrl!)}>Open the pull request form</button>
+                ) : reverted.proposed.pushError}
+              </p>
+            )}
             {diff.state === "ok" && <DiffText text={diff.value} />}
           </div>
         </div>

@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { api } from "../lib/api";
+import type { Blame } from "../lib/types";
 import { formatValue, shortId } from "../lib/model";
 import type { Change, Plan, Resource } from "../lib/types";
 import { Counts, Tag } from "./ui";
@@ -10,7 +12,7 @@ const symbols = { create: "+", update: "~", delete: "−" } as const;
  * A plan as the engine computed it. Nothing here works out a difference itself: every row is a change or a
  * field diff from the engine. `liveLabel`/`desiredLabel` rename the sides for comparisons between targets.
  */
-export function PlanView({ plan, liveLabel = "Live", desiredLabel = "Git" }: { plan: Plan; liveLabel?: string; desiredLabel?: string }) {
+export function PlanView({ plan, liveLabel = "Live", desiredLabel = "Git", repoRoot }: { plan: Plan; liveLabel?: string; desiredLabel?: string; repoRoot?: string }) {
   if (plan.skipped) {
     return <p className="muted">{plan.skipReason}</p>;
   }
@@ -27,7 +29,7 @@ export function PlanView({ plan, liveLabel = "Live", desiredLabel = "Git" }: { p
       {plan.changes.length > 0 && (
         <ul className="changes">
           {plan.changes.map((change) => (
-            <ChangeRow key={`${change.action}:${change.key}`} change={change} liveLabel={liveLabel} desiredLabel={desiredLabel} />
+            <ChangeRow key={`${change.action}:${change.key}`} change={change} liveLabel={liveLabel} desiredLabel={desiredLabel} repoRoot={repoRoot} />
           ))}
         </ul>
       )}
@@ -45,8 +47,20 @@ export function PlanView({ plan, liveLabel = "Live", desiredLabel = "Git" }: { p
   );
 }
 
-function ChangeRow({ change, liveLabel, desiredLabel }: { change: Change; liveLabel: string; desiredLabel: string }) {
+function ChangeRow({ change, liveLabel, desiredLabel, repoRoot }: { change: Change; liveLabel: string; desiredLabel: string; repoRoot?: string }) {
   const [open, setOpen] = useState(change.action === "update");
+  const [why, setWhy] = useState<Record<string, Blame | string> | null>(null);
+  const explain = async () => {
+    const path = relativeTo(change.file!, repoRoot!);
+    const entries = await Promise.all(change.diffs.map(async (d) => {
+      try {
+        return [d.field, await api.blameField(path, d.field)] as const;
+      } catch (e) {
+        return [d.field, (e as { message: string }).message] as const;
+      }
+    }));
+    setWhy(Object.fromEntries(entries));
+  };
   return (
     <li className={`change action-${change.action}`}>
       <button className="change-head" aria-expanded={open} onClick={() => setOpen(!open)}>
@@ -75,6 +89,22 @@ function ChangeRow({ change, liveLabel, desiredLabel }: { change: Change; liveLa
           </tbody>
         </table>
       )}
+      {open && change.action === "update" && change.file && repoRoot && (
+        <div className="why">
+          {!why && <button className="link small" onClick={() => void explain()}>Why does Git say this?</button>}
+          {why && change.diffs.map((d) => {
+            const b = why[d.field];
+            return (
+              <p key={d.field} className="small">
+                <code>{d.field}</code>:{" "}
+                {typeof b === "string" ? <span className="muted">{b}</span>
+                  : b?.commit ? <>set to this in <code>{b.commit.short}</code> by {b.commit.author}, {new Date(b.commit.date).toLocaleDateString()}: “{b.commit.subject}”{b.commit.pullRequest ? ` (#${b.commit.pullRequest})` : ""}. Live differs, so it was changed outside Git since, or never applied.</>
+                  : <span className="muted">an uncommitted edit in your working tree.</span>}
+              </p>
+            );
+          })}
+        </div>
+      )}
     </li>
   );
 }
@@ -91,4 +121,10 @@ export function rows(change: Change): Row[] {
     if (diff) return { field, live: formatValue(diff.live, diff.liveMissing), desired: formatValue(diff.desired), changed: true };
     return { field, live: value(change.live, field), desired: value(change.desired, field), changed: change.action !== "update" };
   });
+}
+
+function relativeTo(path: string, root: string): string {
+  const p = path.replace(/\\/g, "/");
+  const r = root.replace(/\\/g, "/").replace(/\/+$/, "");
+  return p.startsWith(r + "/") ? p.slice(r.length + 1) : p;
 }

@@ -188,6 +188,7 @@ impl GitHub {
                 "status": r["status"],
                 "conclusion": r["conclusion"],
                 "branch": r["head_branch"],
+                "sha": r["head_sha"],
                 "createdAt": r["created_at"],
                 "url": r["html_url"],
                 "jobs": jobs.ok().and_then(|j| j["jobs"].as_array().cloned()).unwrap_or_default().iter()
@@ -209,6 +210,7 @@ impl GitHub {
                 "status": r["status"],
                 "conclusion": r["conclusion"],
                 "branch": r["head_branch"],
+                "sha": r["head_sha"],
                 "title": r["display_title"],
                 "createdAt": r["created_at"],
                 "url": r["html_url"],

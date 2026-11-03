@@ -32,6 +32,10 @@
     "allow-github-dispatch",
     "allow-watch-settings",
     "allow-set-watch-settings",
-    "allow-notify"
+    "allow-notify",
+    "allow-revert-change",
+    "allow-blame-field",
+    "allow-audit-log",
+    "allow-github-workflow-runs"
   ]
 }

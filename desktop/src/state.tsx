@@ -15,6 +15,9 @@ export type Page =
   | { name: "github"; tab?: string }
   | { name: "graph" }
   | { name: "add-target" }
+  | { name: "all-changes" }
+  | { name: "audit" }
+  | { name: "search"; query: string }
   | { name: "settings" };
 
 interface RepoState {

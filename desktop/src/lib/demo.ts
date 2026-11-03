@@ -36,14 +36,15 @@ export const demoTargets: Target[] = [
   target({ name: "dev", kind: "users", keyField: "username", endpoint: "http://127.0.0.1:3000", prune: true, localApply: true,
     workflows: false, resources: 10, mock: "mock/db.json", description: "Development users API: the json-server mock in mock/." }),
   target({ name: "dev-inventory", kind: "items", type: "rest", keyField: "sku", endpoint: "http://127.0.0.1:3000", prune: true, localApply: true,
-    workflows: false, resources: 4, mock: "mock/db.json", description: "Inventory items in the dev mock API: a rest target." }),
+    workflows: false, resources: 4, mock: "mock/db.json", healthCheck: "http://127.0.0.1:3000/items",
+    description: "Inventory items in the dev mock API: a rest target." }),
   target({ name: "github", kind: "labels", keyField: "name", endpoint: "emmanuelalozie/gitops", tokenVariable: "GITHUB_TOKEN",
     resources: 3, description: "Issue labels of this repository. Labels not listed here are left alone." }),
   target({ name: "github-branches", kind: "branch-protection", keyField: "branch", endpoint: "emmanuelalozie/gitops",
     tokenVariable: "GITOPS_ADMIN_TOKEN", tokenRequired: true, description: "Branch protection rules of this repository." }),
   target({ name: "github-repo", kind: "repository", keyField: "name", endpoint: "emmanuelalozie/gitops",
     tokenVariable: "GITOPS_ADMIN_TOKEN", tokenRequired: true, description: "Settings of this repository." }),
-  target({ name: "prod", kind: "users", keyField: "username", endpoint: "https://jsonplaceholder.typicode.com", prune: true,
+  target({ name: "prod", owners: ["@emmanuelalozie"], kind: "users", keyField: "username", endpoint: "https://jsonplaceholder.typicode.com", prune: true,
     verifyAfterApply: false, resources: 10, description: "Production users API." }),
 ];
 
@@ -64,7 +65,12 @@ function plan(name: string): Plan {
   if (t.mock && !mockRunning) {
     throw { kind: "engine", code: "unreachable", message: `can't connect to the live system: GET ${t.endpoint}/users (ConnectException). Is it running?` };
   }
-  if (name === "dev") return devApplied ? emptyPlan(t) : (planFixture as Plan);
+  if (name === "dev") {
+    if (devApplied) return emptyPlan(t);
+    // The engine adds each change's file to plans it serves (the fixture is PlanJson alone).
+    const fixture = planFixture as Plan;
+    return { ...fixture, changes: fixture.changes.map((c) => ({ ...c, file: `${repo.path}/config/dev/users/${c.key.toLowerCase()}.json` })) };
+  }
   if (t.tokenRequired) {
     return { ...emptyPlan(t), skipped: true, planId: null, skipReason: `'${name}' needs a token in ${t.tokenVariable}, which isn't set.` };
   }
@@ -142,6 +148,15 @@ async function engineCall(method: string, params: Record<string, unknown>): Prom
     }
     case "rest.inferSchema":
       return { schema: { type: "object", properties: { id: { type: "integer" }, sku: { type: "string" }, quantity: { type: "integer" } }, required: ["id", "sku", "quantity"], additionalProperties: false } };
+    case "resources.search": {
+      const q = String(params.query).toLowerCase();
+      const results = users.filter((u) => Object.values(u).some((v) => String(v).toLowerCase().includes(q))).map((u) => ({
+        target: "dev", kind: "users", key: String(u.username), file: `/demo/gitops/config/dev/users/${String(u.username).toLowerCase()}.json`,
+        fields: Object.entries(u).filter(([, v]) => String(v).toLowerCase().includes(q)).map(([k]) => k), resource: u }));
+      return { query: params.query, results, truncated: false };
+    }
+    case "health.check":
+      return { ok: true, url: "http://127.0.0.1:3000/items", status: 200, message: 'answered 200 with "WID-001"', seconds: 0.1 };
     case "mock.status":
     case "mock.start":
     case "mock.stop": {
@@ -251,6 +266,18 @@ export const demo = {
           return { proposed: { branch: p.branch, commit: "f00dfeed", fromBranch: "develop", pushed: true, pushError: null }, base: "develop",
             pullRequest: null, compareUrl: `https://github.com/emmanuelalozie/gitops/compare/develop...${p.branch}?expand=1`, pullRequestError: null };
         }
+        case "revert_change": {
+          const short = String(args.sha).slice(0, 7);
+          return { proposed: { branch: `gitops/revert-${short}`, commit: "beefcafe", fromBranch: "develop", pushed: true, pushError: null }, base: "develop",
+            pullRequest: null, compareUrl: `https://github.com/emmanuelalozie/gitops/compare/develop...gitops/revert-${short}?expand=1`, pullRequestError: null };
+        }
+        case "blame_field":
+          return { field: args.field, line: `"${args.field}": …`, commit: history[1] };
+        case "audit_log":
+          return history.map((c, i) => ({ ...c, targets: i === 0 ? ["dev"] : ["dev", "prod"], files: [] }));
+        case "github_workflow_runs":
+          return history.map((c, i) => ({ id: 3000 + i, sha: c.sha, event: "push", status: "completed", conclusion: "success", branch: "develop",
+            createdAt: c.date, url: "https://github.com/emmanuelalozie/gitops/actions", jobs: [{ name: "Apply prod", status: "completed", conclusion: i ? "success" : "skipped", url: "" }] }));
         case "watch_settings":
           return watch;
         case "set_watch_settings":

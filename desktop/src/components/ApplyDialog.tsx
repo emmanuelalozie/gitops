@@ -91,7 +91,13 @@ export function ApplyDialog({ target, plan, onClose }: { target: Target; plan: P
             ))}
           </ul>
           {phase === "running" && <Spinner label="Applying…" />}
-          {result && result.verified && <p className="ok-text">Applied and verified: the live system matches Git.</p>}
+          {result?.deferred && <p className="notice warn">Not applied: {result.deferred}</p>}
+          {result && result.applied && result.verified && <p className="ok-text">Applied and verified: the live system matches Git.</p>}
+          {result?.health && (
+            <p className={result.health.ok ? "ok-text" : "error-text"}>
+              Health check {result.health.ok ? "passed" : "failed"}: <code>{result.health.url}</code> {result.health.message}
+            </p>
+          )}
           {result && result.applied && !result.verifyAfterApply && <p className="muted">Applied. This target doesn't verify after applying.</p>}
           {result && result.applied && result.verifyAfterApply && !result.verified && (
             <ErrorBox error={{ kind: "engine", code: "not_converged", message: `The apply ran but ${result.after?.changes.length ?? "some"} changes remain. The live system may ignore some writes.` }} />

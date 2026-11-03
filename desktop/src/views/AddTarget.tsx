@@ -4,13 +4,18 @@ import type { AppError, Json } from "../lib/types";
 import { ErrorBox, Spinner } from "../components/ui";
 import { useRepo } from "../state";
 
-type KindChoice = "labels" | "repository" | "branch-protection" | "actions-variables" | "users" | "rest";
+type KindChoice = "labels" | "repository" | "branch-protection" | "actions-variables" | "environments" | "webhooks" | "collaborators" | "teams" | "rulesets" | "users" | "rest";
 
 const kinds: { id: KindChoice; label: string; help: string; github: boolean; token?: { name: string; required: boolean } }[] = [
   { id: "labels", label: "GitHub issue labels", help: "Name, colour and description of each label.", github: true, token: { name: "GITHUB_TOKEN", required: false } },
   { id: "repository", label: "GitHub repository settings", help: "Description, topics, merge options, wiki and issues.", github: true, token: { name: "GITOPS_ADMIN_TOKEN", required: true } },
   { id: "branch-protection", label: "GitHub branch protection", help: "Required checks, reviews and pushes, per branch.", github: true, token: { name: "GITOPS_ADMIN_TOKEN", required: true } },
   { id: "actions-variables", label: "GitHub Actions variables", help: "The vars.NAME values workflows read.", github: true, token: { name: "GITOPS_ADMIN_TOKEN", required: true } },
+  { id: "environments", label: "GitHub environments", help: "Deployment environments, their reviewers and wait timers.", github: true, token: { name: "GITOPS_ADMIN_TOKEN", required: true } },
+  { id: "webhooks", label: "GitHub webhooks", help: "Webhook URLs and their events (secrets aren't managed).", github: true, token: { name: "GITOPS_ADMIN_TOKEN", required: true } },
+  { id: "collaborators", label: "GitHub collaborators", help: "People with direct access, and their role.", github: true, token: { name: "GITOPS_ADMIN_TOKEN", required: true } },
+  { id: "teams", label: "GitHub teams", help: "Organization teams with access, and their role.", github: true, token: { name: "GITOPS_ADMIN_TOKEN", required: true } },
+  { id: "rulesets", label: "GitHub rulesets", help: "Branch and tag rulesets, in GitHub's own shape.", github: true, token: { name: "GITOPS_ADMIN_TOKEN", required: true } },
   { id: "rest", label: "A REST API collection", help: "Any API that lists, creates, updates and deletes JSON objects, such as /items of an inventory API.", github: false },
   { id: "users", label: "A users API (JSONPlaceholder-style)", help: "The demo kind: /users with username, email and phone.", github: false },
 ];
@@ -36,12 +41,13 @@ export function AddTarget() {
   const [prune, setPrune] = useState(false);
   const [workflows, setWorkflows] = useState(true);
   const [importLive, setImportLive] = useState(true);
+  const [openPull, setOpenPull] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<AppError | null>(null);
 
   const repoName = repository.split("/")[1] ?? "";
   const suggested = choice.github
-    ? `${repoName || "repo"}-${kind === "repository" ? "settings" : kind === "branch-protection" ? "branches" : kind === "actions-variables" ? "variables" : "labels"}`
+    ? `${repoName || "repo"}-${kind === "repository" ? "settings" : kind === "branch-protection" ? "branches" : kind === "actions-variables" ? "variables" : kind}`
     : kind === "rest" ? resource || "items" : "users";
   const targetName = (name || suggested).toLowerCase().replace(/[^a-z0-9._-]+/g, "-");
 
@@ -93,6 +99,19 @@ export function AddTarget() {
       }
       await reload();
       void planTarget(targetName);
+      if (openPull) {
+        setBusy("Opening the pull request…");
+        const paths = (await api.configChanges()).map((c) => c.path).filter((p) => p.startsWith(`config/${targetName}/`));
+        const result = await api.propose({
+          branch: `gitops/add-${targetName}`,
+          title: `Manage ${targetName} from Git`,
+          body: `Adds the ${choice.label.toLowerCase()} target \`${targetName}\`${importLive ? ", imported from what's live now, so merging it changes nothing" : ""}.`,
+          paths,
+          labels: ["config-change"],
+        });
+        const link = result.pullRequest?.url ?? result.compareUrl;
+        if (link) void api.openUrl(link);
+      }
       go({ name: "target", target: targetName, tab: "config" });
     } catch (e) {
       setError(e as AppError);
@@ -163,6 +182,7 @@ export function AddTarget() {
         )}
 
         <label className="check"><input type="checkbox" checked={importLive} onChange={(e) => setImportLive(e.target.checked)} /> Import what's live now, so Git starts out matching it</label>
+        <label className="check"><input type="checkbox" checked={openPull} onChange={(e) => setOpenPull(e.target.checked)} /> Open a pull request right away <span className="muted small">(otherwise propose it from Changes)</span></label>
         <label className="check"><input type="checkbox" checked={prune} onChange={(e) => setPrune(e.target.checked)} /> Prune: delete live resources that aren't in Git <span className="muted small">(off leaves them alone, listed as unmanaged)</span></label>
         <label className="check"><input type="checkbox" checked={workflows} onChange={(e) => setWorkflows(e.target.checked)} /> Plan, apply and check for drift in the GitHub workflows once merged</label>
 

@@ -3,6 +3,9 @@ import { api } from "./lib/api";
 import type { RepoInfo } from "./lib/types";
 import { RepoProvider, useRepo } from "./state";
 import { AddTarget } from "./views/AddTarget";
+import { AllChanges } from "./views/AllChanges";
+import { Audit } from "./views/Audit";
+import { Search } from "./views/Search";
 import { Changes } from "./views/Changes";
 import { Compare } from "./views/Compare";
 import { GitHub } from "./views/GitHub";
@@ -50,6 +53,12 @@ function Router() {
       return <Graph />;
     case "add-target":
       return <AddTarget />;
+    case "all-changes":
+      return <AllChanges />;
+    case "audit":
+      return <Audit />;
+    case "search":
+      return <Search query={page.query} />;
     case "settings":
       return <Settings />;
   }

@@ -15,7 +15,7 @@ function NavButton({ page, current, children, count, tone }: { page: Page; curre
 }
 
 export function Shell({ children }: { children: ReactNode }) {
-  const { repo, targets, plans, page, validation, lint, changeCount, close } = useRepo();
+  const { repo, targets, plans, page, validation, lint, changeCount, close, go } = useRepo();
   const problemCount =
     (validation.state === "ok" ? validation.value.targets.reduce((n, t) => n + t.problems.length, 0) : 0) +
     (lint.state === "ok" ? lint.value.findings.length : 0);
@@ -30,12 +30,18 @@ export function Shell({ children }: { children: ReactNode }) {
           </div>
           {!inDesktop && <div className="demo-pill">Demo data</div>}
         </div>
+        <div className="search-box">
+          <input type="search" placeholder="Search resources…" aria-label="Search resources in every target"
+            value={page.name === "search" ? page.query : ""} onChange={(e) => go({ name: "search", query: e.target.value })} />
+        </div>
         <nav>
           <NavButton page={{ name: "overview" }} current={page}>Overview</NavButton>
+          <NavButton page={{ name: "all-changes" }} current={page}>All changes</NavButton>
           <NavButton page={{ name: "changes" }} current={page} count={changeCount} tone="info">Changes</NavButton>
           <NavButton page={{ name: "problems" }} current={page} count={problemCount}>Problems</NavButton>
           <NavButton page={{ name: "compare" }} current={page}>Compare</NavButton>
           <NavButton page={{ name: "graph" }} current={page}>Graph</NavButton>
+          <NavButton page={{ name: "audit" }} current={page}>Audit</NavButton>
           {repo.git.github && <NavButton page={{ name: "github" }} current={page}>GitHub</NavButton>}
           <div className="nav-heading">Targets</div>
           {targets.state === "ok" &&

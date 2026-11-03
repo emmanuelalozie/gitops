@@ -296,6 +296,18 @@ async fn propose(state: State<'_, AppState>, proposal: git::Proposal) -> Result<
     let proposed = tauri::async_runtime::spawn_blocking(move || git::propose(&worker_repo, &worker_proposal))
         .await
         .map_err(|e| AppError::internal(e.to_string()))??;
+    open_pull(&state, status, proposed, &proposal.title, &proposal.body, &proposal.labels).await
+}
+
+/// After a branch is pushed: opens its pull request when there's a token, otherwise hands back GitHub's form.
+async fn open_pull(
+    state: &AppState,
+    status: git::RepoStatus,
+    proposed: git::Proposed,
+    title: &str,
+    body: &str,
+    labels: &[String],
+) -> Result<ProposeResult> {
     let base = status.default_branch.clone().unwrap_or_else(|| proposed.from_branch.clone());
     let mut result = ProposeResult { proposed, base: base.clone(), pull_request: None, compare_url: None, pull_request_error: None };
     let Some(github) = status.github else { return Ok(result) };
@@ -303,12 +315,12 @@ async fn propose(state: State<'_, AppState>, proposal: git::Proposal) -> Result<
         return Ok(result);
     }
     match state.github_token() {
-        Some(token) => match state.github.create_pull(&github, &token, &result.proposed.branch, &base, &proposal.title, &proposal.body).await {
+        Some(token) => match state.github.create_pull(&github, &token, &result.proposed.branch, &base, title, body).await {
             Ok(pull) => {
-                if !proposal.labels.is_empty() {
+                if !labels.is_empty() {
                     if let Some(number) = pull["number"].as_u64() {
                         // Best effort: a missing label shouldn't hide the pull request that was opened.
-                        let _ = state.github.add_labels(&github, &token, number, &proposal.labels).await;
+                        let _ = state.github.add_labels(&github, &token, number, labels).await;
                     }
                 }
                 result.pull_request = Some(pull)
@@ -321,6 +333,40 @@ async fn propose(state: State<'_, AppState>, proposal: git::Proposal) -> Result<
         None => result.compare_url = Some(github::compare_url(&github, &base, &result.proposed.branch)),
     }
     Ok(result)
+}
+
+/// Undoes a past config change through a pull request: a branch with the revert, pushed, and a PR into the
+/// default branch.
+#[tauri::command]
+async fn revert_change(state: State<'_, AppState>, sha: String, subject: String) -> Result<ProposeResult> {
+    let repo = state.repo()?;
+    let status = git::status(&repo)?;
+    let short: String = sha.chars().take(7).collect();
+    let branch = format!("gitops/revert-{short}");
+    let worker = (repo.clone(), sha.clone(), branch.clone());
+    let proposed = tauri::async_runtime::spawn_blocking(move || git::revert(&worker.0, &worker.1, &worker.2))
+        .await
+        .map_err(|e| AppError::internal(e.to_string()))??;
+    let title = format!("Revert \"{subject}\"");
+    let body = format!("Undoes {sha} through the GitOps app. The Plan workflow comments with what merging this changes.");
+    open_pull(&state, status, proposed, &title, &body, &["config-change".to_string()]).await
+}
+
+#[tauri::command]
+fn blame_field(state: State<'_, AppState>, path: String, field: String) -> Result<git::Blame> {
+    git::blame_field(&state.repo()?, &path, &field)
+}
+
+#[tauri::command]
+fn audit_log(state: State<'_, AppState>, limit: Option<usize>) -> Result<Vec<git::AuditEntry>> {
+    git::audit(&state.repo()?, limit.unwrap_or(50))
+}
+
+/// Recent runs of one workflow with their jobs (Apply runs, for the audit view).
+#[tauri::command]
+async fn github_workflow_runs(state: State<'_, AppState>, workflow: String, limit: Option<usize>) -> Result<Value> {
+    let repo = github_repo(&state)?;
+    state.github.workflow_runs_with_jobs(&repo, state.github_token().as_deref(), &workflow, limit.unwrap_or(30)).await
 }
 
 /// The GitHub repository of the open repository (its origin remote).
@@ -457,6 +503,10 @@ pub fn run() {
             watch_settings,
             set_watch_settings,
             notify,
+            revert_change,
+            blame_field,
+            audit_log,
+            github_workflow_runs,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the GitOps app")

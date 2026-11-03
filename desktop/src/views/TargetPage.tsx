@@ -13,7 +13,7 @@ import { HistoryTab } from "./HistoryTab";
 type Tab = "plan" | "config" | "live" | "history";
 
 export function TargetPage({ name }: { name: string }) {
-  const { targets, plans, planTarget, page, go } = useRepo();
+  const { targets, plans, planTarget, page, go, repo } = useRepo();
   const target = targets.state === "ok" ? targets.value.find((t) => t.name === name) : undefined;
   if (!target) return <Empty title={`No target '${name}'`}>It may have been removed from config/.</Empty>;
   const plan = plans[name];
@@ -61,7 +61,7 @@ export function TargetPage({ name }: { name: string }) {
                 Planned {relativeTime(plan.at)} against <code>{target.endpoint}</code>.
                 {!target.localApply && plan.value.hasChanges && " This target changes through pull requests: merge to apply, or start the Apply workflow."}
               </p>
-              <PlanView plan={plan.value} />
+              <PlanView plan={plan.value} repoRoot={repo.path} />
             </>
           )}
         </section>
@@ -74,8 +74,30 @@ export function TargetPage({ name }: { name: string }) {
 }
 
 function TargetFacts({ target }: { target: Target }) {
+  const [health, setHealth] = useState<string | null>(null);
+  const check = async () => {
+    setHealth("checking…");
+    try {
+      const r = await api.healthCheck(target.name);
+      setHealth(r ? `${r.ok ? "healthy" : "unhealthy"}: ${r.message}` : "no health check");
+    } catch (e) {
+      setHealth((e as { message: string }).message);
+    }
+  };
   return (
     <div className="facts">
+      {target.environment && target.workflows && <Tag title="The GitHub environment whose reviewers approve the Apply workflow for this target">approved in {target.environment}</Tag>}
+      {target.owners && target.owners.length > 0 && <Tag title="Reviewers of changes to this target (CODEOWNERS)">owners {target.owners.join(" ")}</Tag>}
+      {target.applyWindow && (
+        <Tag tone={target.applyWindow.open ? "ok" : "warn"} title={`Next opening ${new Date(target.applyWindow.nextOpening).toLocaleString()}`}>
+          applies {target.applyWindow.describe} ({target.applyWindow.open ? "open now" : "closed"})
+        </Tag>
+      )}
+      {target.healthCheck && (
+        <Tag title={target.healthCheck}>
+          health check <button className="link small" onClick={() => void check()}>check now</button>{health && ` · ${health}`}
+        </Tag>
+      )}
       <Tag>{target.kind}</Tag>
       <Tag title={target.endpointOverridden ? `Overridden by ${target.endpointVariable}` : undefined}>
         {target.endpoint}{target.endpointOverridden ? " (overridden)" : ""}
