@@ -77,3 +77,15 @@ it("starts a stopped mock and re-plans the targets that use it", async () => {
   expect(await screen.findByText("mock running", {}, { timeout: 3000 })).toBeTruthy();
   await waitFor(() => expect(screen.queryByText(/Press Start mock/)).toBeNull(), { timeout: 3000 });
 });
+
+it("adds a target for another repository and imports what's live", async () => {
+  render(<App />);
+  fireEvent.click(await screen.findByText("Open a repository…"));
+  fireEvent.click(await screen.findByText("Add target…"));
+  fireEvent.change(screen.getByLabelText(/^Repository/), { target: { value: "emmanuelalozie/inventory-manager" } });
+  expect(screen.getByRole("button", { name: "Add inventory-manager-labels" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Add inventory-manager-labels" }));
+  expect(await screen.findByRole("heading", { name: /inventory-manager-labels/ }, { timeout: 3000 })).toBeTruthy();
+  const nav = screen.getByRole("navigation");
+  expect(within(nav).getByText("inventory-manager-labels")).toBeTruthy();
+});

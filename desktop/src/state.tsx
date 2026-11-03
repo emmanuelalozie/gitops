@@ -13,6 +13,7 @@ export type Page =
   | { name: "compare" }
   | { name: "github"; tab?: string }
   | { name: "graph" }
+  | { name: "add-target" }
   | { name: "settings" };
 
 interface RepoState {

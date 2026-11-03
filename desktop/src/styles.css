@@ -336,6 +336,18 @@ button.cell { cursor: pointer; }
 .mock { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
 .mock.compact { margin-top: 0; }
 
+.add-target { max-width: 860px; display: grid; gap: 16px; }
+.add-target .field-row { align-items: end; }
+.add-target fieldset { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 14px 12px; display: grid; gap: 6px; }
+.add-target legend { padding: 0 6px; color: var(--muted); font-size: 12.5px; }
+.choice { display: flex; gap: 10px; align-items: baseline; }
+.check { display: flex; gap: 8px; align-items: baseline; }
+.field-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.field-row .field { flex: 1 1 160px; }
+.field-row .field.grow { flex: 3 1 300px; }
+.add-target .field span { font-size: 12.5px; }
+.add-target input[type="text"], .add-target input:not([type]), .add-target textarea { width: 100%; font-family: var(--mono); font-size: 13px; }
+
 @media (prefers-reduced-motion: reduce) {
   .spin, .health-loading .dot, .dot.health-loading { animation: none; }
 }

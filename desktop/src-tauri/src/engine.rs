@@ -34,6 +34,11 @@ pub const ALLOWED_METHODS: &[&str] = &[
     "resource.write",
     "resource.delete",
     "repo.lint",
+    // Adding a target (writes config/<name>/ in the working tree), importing live state into Git, and a first
+    // schema for a REST API.
+    "targets.create",
+    "targets.snapshot",
+    "rest.inferSchema",
     // A target's local mock API ("mock" in target.json), run by the engine and stopped when it exits.
     "mock.status",
     "mock.start",

@@ -230,9 +230,8 @@ public final class Main {
     }
 
     private int snapshot(Target target) {
-        List<ObjectNode> live = target.provider().list();
-        target.store().replaceAll(live);
-        out.println("Wrote " + live.size() + " " + target.kind().id() + " to " + target.resourceDir());
+        ObjectNode result = new Engine(target.dir().getParent()).snapshot(target);
+        out.println("Wrote " + result.path("written").asInt() + " " + target.kind().id() + " to " + target.resourceDir());
         return OK;
     }
 

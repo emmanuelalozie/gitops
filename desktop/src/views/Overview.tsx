@@ -5,7 +5,7 @@ import { useRepo } from "../state";
 import { MockControl } from "../components/MockControl";
 
 export function Overview() {
-  const { targets, plans, planAll } = useRepo();
+  const { targets, plans, planAll, go } = useRepo();
   if (targets.state === "loading" || targets.state === "idle") return <Spinner label="Loading targets…" />;
   if (targets.state === "error") return <ErrorBox error={targets.error} />;
 
@@ -28,7 +28,10 @@ export function Overview() {
             {targets.value.length} targets · {counts["in-sync"] ?? 0} in sync · {counts.drift ?? 0} with changes{extra}
           </p>
         </div>
-        <button onClick={planAll}>Plan all</button>
+        <div className="head-actions">
+          <button onClick={() => go({ name: "add-target" })}>Add target…</button>
+          <button onClick={planAll}>Plan all</button>
+        </div>
       </header>
       <div className="cards">
         {targets.value.map((t) => <TargetCard key={t.name} target={t} />)}

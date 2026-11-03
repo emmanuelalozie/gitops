@@ -152,6 +152,12 @@ public final class EngineServer {
             case "resource.delete" -> locked(required(params, "target"), () -> engine.deleteResource(
                     engine.target(required(params, "target")), required(params, "key")));
             case "repo.lint" -> Lint.run(engine);
+            case "targets.create" -> engine.createTarget(required(params, "name"), object(params, "settings"),
+                    params.get("schema") instanceof ObjectNode schema ? schema : null);
+            case "targets.snapshot" -> locked(required(params, "target"), () -> engine.snapshot(engine.target(required(params, "target"))));
+            case "rest.inferSchema" -> Json.MAPPER.createObjectNode().set("schema", Engine.inferSchema(
+                    new gitops.providers.RestProvider(required(params, "baseUrl"), optional(params, "path") == null ? "/" : required(params, "path"),
+                            "id", "PATCH", null).list()));
             case "mock.status" -> mocks.status(engine.target(required(params, "target")));
             case "mock.start" -> mocks.start(engine.target(required(params, "target")));
             case "mock.stop" -> mocks.stop(engine.target(required(params, "target")));

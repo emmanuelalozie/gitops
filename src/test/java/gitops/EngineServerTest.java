@@ -152,4 +152,59 @@ class EngineServerTest {
         assertThat(response(lines, 1).path("error").path("code").asInt()).isEqualTo(EngineServer.METHOD_NOT_FOUND);
         assertThat(response(lines, 2).path("error").path("data").path("code").asText()).isEqualTo(EngineError.USAGE);
     }
+
+    @Test
+    void createsTargetsWithoutOverwritingAnything() throws Exception {
+        List<JsonNode> lines = exchange(
+                request(1, "targets.create", "{\"name\": \"inventory-labels\", \"settings\": {\"kind\": \"labels\","
+                        + " \"repository\": \"me/inventory-manager\", \"prune\": false, \"description\": \"Labels\"}}"),
+                request(2, "targets.create", "{\"name\": \"dev\", \"settings\": {\"kind\": \"users\", \"baseUrl\": \"http://x\"}}"),
+                request(3, "targets.create", "{\"name\": \"Bad Name\", \"settings\": {\"kind\": \"labels\", \"repository\": \"a/b\"}}"),
+                request(4, "targets.create", "{\"name\": \"x\", \"settings\": {\"kind\": \"labels\", \"repository\": \"nope\"}}"),
+                request(5, "targets.create", "{\"name\": \"inv\", \"settings\": {\"kind\": \"rest\", \"resource\": \"items\","
+                        + " \"key\": \"sku\", \"baseUrl\": \"http://127.0.0.1:1\"}, \"schema\": {\"type\": \"object\","
+                        + " \"properties\": {\"id\": {\"type\": \"integer\"}, \"sku\": {\"type\": \"string\"}}}}"),
+                request(6, "targets.create", "{\"name\": \"inv2\", \"settings\": {\"kind\": \"rest\", \"resource\": \"items\","
+                        + " \"key\": \"code\", \"baseUrl\": \"http://x\"}, \"schema\": {\"properties\": {\"sku\": {}}}}"));
+
+        assertThat(response(lines, 1).path("result").path("kind").asText()).isEqualTo("labels");
+        assertThat(Files.readString(root.resolve("inventory-labels/target.json")))
+                .startsWith("{\n  \"description\": \"Labels\",\n  \"kind\": \"labels\"");
+        assertThat(root.resolve("inventory-labels/labels")).isDirectory();
+        assertThat(response(lines, 2).path("error").path("data").path("code").asText()).isEqualTo(EngineError.NOT_ALLOWED);
+        assertThat(response(lines, 3).path("error").path("message").asText()).contains("lower-case");
+        assertThat(response(lines, 4).path("error").path("message").asText()).contains("owner/name");
+        assertThat(response(lines, 5).path("result").path("type").asText()).isEqualTo("rest");
+        assertThat(root.resolve("inv/items.schema.json")).exists();
+        // A definition that doesn't load leaves nothing behind.
+        assertThat(response(lines, 6).path("error").path("message").asText()).contains("key field 'code'");
+        assertThat(root.resolve("inv2")).doesNotExist();
+    }
+
+    @Test
+    void snapshotsTheLiveStateIntoGit() {
+        api.stubFor(get("/users").willReturn(okJson("[" + Json.compact(user(3, "Samantha", "s@b.io")) + "]")));
+
+        JsonNode result = response(exchange(request(1, "targets.snapshot", "{\"target\": \"dev\"}")), 1).path("result");
+
+        assertThat(result.path("written").asInt()).isEqualTo(1);
+        assertThat(root.resolve("dev/users/samantha.json")).exists();
+        assertThat(root.resolve("dev/users/bret.json")).doesNotExist();
+    }
+
+    @Test
+    void infersAFirstSchemaFromARestApi() {
+        api.stubFor(get("/api/items").willReturn(okJson("""
+                [{"id": 1, "sku": "A", "price": 2, "tags": ["x"], "note": null},
+                 {"id": 2, "sku": "B", "price": 2.5}]""")));
+
+        JsonNode schema = response(exchange(request(1, "rest.inferSchema",
+                "{\"baseUrl\": \"" + api.baseUrl() + "\", \"path\": \"/api/items\"}")), 1).path("result").path("schema");
+
+        assertThat(schema.path("properties").path("id").path("type").asText()).isEqualTo("integer");
+        assertThat(schema.path("properties").path("price").path("type").asText()).isEqualTo("number");
+        assertThat(schema.path("properties").path("tags").path("type").asText()).isEqualTo("array");
+        assertThat(schema.path("properties").has("note")).isFalse();
+        assertThat(schema.path("required").toString()).isEqualTo("[\"id\",\"sku\",\"price\"]");
+    }
 }

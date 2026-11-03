@@ -64,6 +64,11 @@ export const api = {
   checkResource: (target: string, resource: Resource, previousKey?: string) =>
     engine<{ ok: boolean; problems: Problem[] }>("resource.check", { target, resource, previousKey }),
   lint: () => engine<Lint>("repo.lint"),
+  createTarget: (name: string, settings: Record<string, Json>, schema?: Record<string, Json>) =>
+    engine<Target>("targets.create", { name, settings, schema }),
+  snapshot: (target: string) => engine<{ written: number; before: number; dir: string }>("targets.snapshot", { target }),
+  inferSchema: (baseUrl: string, path: string) =>
+    engine<{ schema: Record<string, Json> }>("rest.inferSchema", { baseUrl, path }).then((r) => r.schema),
   mockStatus: (target: string) => engine<MockStatus>("mock.status", { target }),
   startMock: (target: string) => engine<MockStatus>("mock.start", { target }),
   stopMock: (target: string) => engine<MockStatus>("mock.stop", { target }),

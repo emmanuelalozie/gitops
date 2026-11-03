@@ -35,6 +35,8 @@ const target = (t: Partial<Target> & Pick<Target, "name" | "kind" | "keyField">)
 export const demoTargets: Target[] = [
   target({ name: "dev", kind: "users", keyField: "username", endpoint: "http://127.0.0.1:3000", prune: true, localApply: true,
     workflows: false, resources: 10, mock: "mock/db.json", description: "Development users API: the json-server mock in mock/." }),
+  target({ name: "dev-inventory", kind: "items", type: "rest", keyField: "sku", endpoint: "http://127.0.0.1:3000", prune: true, localApply: true,
+    workflows: false, resources: 4, mock: "mock/db.json", description: "Inventory items in the dev mock API: a rest target." }),
   target({ name: "github", kind: "labels", keyField: "name", endpoint: "emmanuelalozie/gitops", tokenVariable: "GITHUB_TOKEN",
     resources: 3, description: "Issue labels of this repository. Labels not listed here are left alone." }),
   target({ name: "github-branches", kind: "branch-protection", keyField: "branch", endpoint: "emmanuelalozie/gitops",
@@ -122,6 +124,24 @@ async function engineCall(method: string, params: Record<string, unknown>): Prom
     }
     case "targets.compare":
       return { ...(planFixture as Plan), planId: null, target: `${params.from} -> ${params.to}`, description: "users in Git", from: params.from, to: params.to };
+    case "targets.create": {
+      const settings = params.settings as Record<string, unknown>;
+      const name = String(params.name);
+      if (demoTargets.some((t) => t.name === name)) throw { kind: "engine", code: "not_allowed", message: `config/${name} already exists` };
+      const kind = settings.kind === "rest" ? String(settings.resource) : String(settings.kind);
+      const created = target({ name, kind, keyField: "name", type: settings.kind === "rest" ? "rest" : kind === "users" ? "users" : "github",
+        endpoint: String(settings.repository ?? settings.baseUrl), prune: Boolean(settings.prune), resources: 0, description: String(settings.description ?? "") });
+      demoTargets.push(created);
+      changes.add(`config/${name}/target.json`);
+      return created;
+    }
+    case "targets.snapshot": {
+      const t = demoTargets.find((x) => x.name === params.target)!;
+      t.resources = 7;
+      return { written: 7, before: 0, dir: t.resourceDir };
+    }
+    case "rest.inferSchema":
+      return { schema: { type: "object", properties: { id: { type: "integer" }, sku: { type: "string" }, quantity: { type: "integer" } }, required: ["id", "sku", "quantity"], additionalProperties: false } };
     case "mock.status":
     case "mock.start":
     case "mock.stop": {

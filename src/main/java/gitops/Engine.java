@@ -189,6 +189,128 @@ public final class Engine {
         return root;
     }
 
+    private static final java.util.regex.Pattern TARGET_NAME = java.util.regex.Pattern.compile("[a-z0-9][a-z0-9._-]{0,63}");
+    private static final java.util.regex.Pattern REPOSITORY = java.util.regex.Pattern.compile("[A-Za-z0-9-]+/[A-Za-z0-9._-]+");
+
+    /**
+     * Adds a target: writes config/&lt;name&gt;/target.json (and, for a rest target, its schema) and creates the
+     * resource folder. Never overwrites anything; if the result doesn't load, nothing is left behind.
+     */
+    public ObjectNode createTarget(String name, ObjectNode settings, ObjectNode schema) {
+        if (name == null || !TARGET_NAME.matcher(name).matches()) {
+            throw new IllegalArgumentException("A target name is lower-case letters, digits, '.', '_' and '-', such as inventory-labels");
+        }
+        Path dir = configRoot.resolve(name);
+        if (Files.exists(dir)) {
+            throw new EngineError.NotAllowed("config/" + name + " already exists");
+        }
+        String kindId = settings.path("kind").asText("");
+        boolean rest = kindId.equals("rest");
+        Kind kind = rest ? null : Kind.fromId(kindId);
+        if (rest || kind.family() == Kind.Family.USERS_API) {
+            String baseUrl = settings.path("baseUrl").asText("");
+            if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
+                throw new IllegalArgumentException("\"baseUrl\" must be an http:// or https:// URL");
+            }
+        } else if (!REPOSITORY.matcher(settings.path("repository").asText("")).matches()) {
+            throw new IllegalArgumentException("\"repository\" must look like owner/name");
+        }
+        if (rest && (schema == null || !schema.path("properties").isObject())) {
+            throw new IllegalArgumentException("A rest target needs a JSON Schema with \"properties\" for its resources");
+        }
+        // target.json reads best with the description and kind first.
+        ObjectNode ordered = Json.MAPPER.createObjectNode();
+        if (settings.hasNonNull("description")) {
+            ordered.set("description", settings.get("description"));
+        }
+        ordered.put("kind", kindId);
+        settings.properties().forEach(e -> {
+            if (!e.getKey().equals("description") && !e.getKey().equals("kind") && !e.getValue().isNull()) {
+                ordered.set(e.getKey(), e.getValue());
+            }
+        });
+        try {
+            Files.createDirectories(dir);
+            if (rest) {
+                Json.write(dir.resolve(ordered.path("resource").asText("items") + ".schema.json"), schema);
+            }
+            Json.write(dir.resolve(Target.FILE), ordered);
+            Target target = Target.load(configRoot, name);
+            Files.createDirectories(target.resourceDir());
+            return target.toJson();
+        } catch (RuntimeException | java.io.IOException e) {
+            deleteTree(dir);
+            if (e instanceof RuntimeException runtime) {
+                throw runtime;
+            }
+            throw new java.io.UncheckedIOException((java.io.IOException) e);
+        }
+    }
+
+    /** Writes the live state into Git: one file per resource, managed fields only, removing files for anything else. */
+    public ObjectNode snapshot(Target target) {
+        List<ObjectNode> live = target.provider().list();
+        int before = target.store().files().size();
+        target.store().replaceAll(live);
+        return Json.MAPPER.createObjectNode().put("target", target.name()).put("written", live.size())
+                .put("before", before).put("dir", target.resourceDir().toString());
+    }
+
+    /**
+     * A first JSON Schema for a REST collection, from what it returns now: each field's JSON type, required when
+     * every item has it. People edit it before creating the target; only the fields it declares are managed.
+     */
+    public static ObjectNode inferSchema(List<ObjectNode> items) {
+        java.util.Map<String, java.util.Set<String>> types = new java.util.LinkedHashMap<>();
+        java.util.Map<String, Integer> present = new java.util.HashMap<>();
+        for (ObjectNode item : items) {
+            item.properties().forEach(e -> {
+                JsonNode v = e.getValue();
+                if (v.isNull()) {
+                    return;
+                }
+                String type = v.isIntegralNumber() ? "integer" : v.isNumber() ? "number" : v.isBoolean() ? "boolean"
+                        : v.isTextual() ? "string" : v.isArray() ? "array" : "object";
+                types.computeIfAbsent(e.getKey(), k -> new java.util.TreeSet<>()).add(type);
+                present.merge(e.getKey(), 1, Integer::sum);
+            });
+        }
+        ObjectNode schema = Json.MAPPER.createObjectNode();
+        schema.put("$schema", "https://json-schema.org/draft/2020-12/schema");
+        schema.put("type", "object");
+        ObjectNode properties = schema.putObject("properties");
+        ArrayNode required = Json.MAPPER.createArrayNode();
+        types.forEach((field, set) -> {
+            if (set.contains("integer") && set.contains("number")) {
+                set.remove("integer");
+            }
+            ObjectNode property = properties.putObject(field);
+            if (set.size() == 1) {
+                property.put("type", set.iterator().next());
+            } else {
+                ArrayNode list = property.putArray("type");
+                set.forEach(list::add);
+            }
+            if (!items.isEmpty() && present.get(field) == items.size()) {
+                required.add(field);
+            }
+        });
+        schema.set("required", required);
+        schema.put("additionalProperties", false);
+        return schema;
+    }
+
+    private static void deleteTree(Path dir) {
+        if (!Files.exists(dir)) {
+            return;
+        }
+        try (var paths = Files.walk(dir)) {
+            paths.sorted(java.util.Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
+        } catch (java.io.IOException e) {
+            // best effort: leave the folder for the person to remove
+        }
+    }
+
     /** The schema of a target's kind (a rest target has its own), or of a built-in kind by id. */
     public JsonNode schema(String targetName, String kindId) {
         return targetName != null ? target(targetName).kind().schema() : Kind.fromId(kindId).schema();

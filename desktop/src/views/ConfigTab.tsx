@@ -31,6 +31,18 @@ export function ConfigTab({ target }: { target: Target }) {
     void api.schema(target.name).then((s) => setFields(fieldsOf(s)));
   }, [target.name]);
 
+  const importLive = async () => {
+    if (!window.confirm(`Replace ${target.name}'s files in Git with what's live now? You can review or discard the result in Changes.`)) return;
+    try {
+      const result = await api.snapshot(target.name);
+      setSaved(`Imported ${result.written} from the live system. Review them in Changes.`);
+      void load();
+    } catch (e) {
+      setSaved(null);
+      setEntries({ state: "error", error: e as AppError });
+    }
+  };
+
   if (entries.state === "loading" || entries.state === "idle") return <Spinner label="Reading config…" />;
   if (entries.state === "error") return <ErrorBox error={entries.error} />;
 
@@ -58,7 +70,12 @@ export function ConfigTab({ target }: { target: Target }) {
           {entries.value.length} files in <code>{target.resourceDir.split(/[\\/]/).slice(-3).join("/")}</code>. Edits change your working
           tree; propose them from <button className="link" onClick={() => go({ name: "changes" })}>Changes</button>.
         </p>
-        {target.kind !== "repository" && <button onClick={() => setEditing("new")}>New {target.kind === "users" ? "user" : "resource"}</button>}
+        <div className="head-actions">
+          <button title="Replace the files with what the live system has now (they show up in Changes)" onClick={() => void importLive()}>
+            Import live state
+          </button>
+          {target.kind !== "repository" && <button onClick={() => setEditing("new")}>New {target.kind === "users" ? "user" : "resource"}</button>}
+        </div>
       </div>
       {saved && <p className="notice" role="status">{saved}</p>}
       <div className="table-wrap">

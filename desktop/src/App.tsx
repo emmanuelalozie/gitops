@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { api } from "./lib/api";
 import type { RepoInfo } from "./lib/types";
 import { RepoProvider, useRepo } from "./state";
+import { AddTarget } from "./views/AddTarget";
 import { Changes } from "./views/Changes";
 import { Compare } from "./views/Compare";
 import { GitHub } from "./views/GitHub";
@@ -47,6 +48,8 @@ function Router() {
       return <GitHub />;
     case "graph":
       return <Graph />;
+    case "add-target":
+      return <AddTarget />;
     case "settings":
       return <Settings />;
   }
