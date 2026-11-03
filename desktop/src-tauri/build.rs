@@ -17,6 +17,11 @@ const COMMANDS: &[&str] = &[
     "commit_diff",
     "propose",
     "open_url",
+    "github_pulls",
+    "github_pull_details",
+    "github_drift",
+    "github_runs",
+    "github_dispatch",
 ];
 
 fn main() {

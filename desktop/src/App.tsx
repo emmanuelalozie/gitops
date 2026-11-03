@@ -4,6 +4,7 @@ import type { RepoInfo } from "./lib/types";
 import { RepoProvider, useRepo } from "./state";
 import { Changes } from "./views/Changes";
 import { Compare } from "./views/Compare";
+import { GitHub } from "./views/GitHub";
 import { Overview } from "./views/Overview";
 import { Problems } from "./views/Problems";
 import { Settings } from "./views/Settings";
@@ -41,6 +42,8 @@ function Router() {
       return <Changes />;
     case "compare":
       return <Compare />;
+    case "github":
+      return <GitHub />;
     case "settings":
       return <Settings />;
   }

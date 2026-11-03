@@ -297,6 +297,62 @@ async fn propose(state: State<'_, AppState>, proposal: git::Proposal) -> Result<
     Ok(result)
 }
 
+/// The GitHub repository of the open repository (its origin remote).
+fn github_repo(state: &AppState) -> Result<git::GitHubRepo> {
+    git::status(&state.repo()?)?.github.ok_or_else(|| {
+        AppError::new("github", "no_github_remote", "This repository has no GitHub remote named origin, so there's nothing to show from GitHub")
+    })
+}
+
+#[tauri::command]
+async fn github_pulls(state: State<'_, AppState>) -> Result<Value> {
+    let repo = github_repo(&state)?;
+    state.github.pull_requests(&repo, state.github_token().as_deref()).await
+}
+
+#[tauri::command]
+async fn github_pull_details(state: State<'_, AppState>, number: u64, sha: String) -> Result<Value> {
+    let repo = github_repo(&state)?;
+    state.github.pull_details(&repo, state.github_token().as_deref(), number, &sha).await
+}
+
+/// Drift issues and the recent runs of the drift workflow, each with one job per target.
+#[tauri::command]
+async fn github_drift(state: State<'_, AppState>, workflow: Option<String>, limit: Option<usize>) -> Result<Value> {
+    let repo = github_repo(&state)?;
+    let token = state.github_token();
+    let workflow = workflow.unwrap_or_else(|| "drift.yml".into());
+    let (issues, runs) = futures_util::join!(
+        state.github.drift_issues(&repo, token.as_deref()),
+        state.github.workflow_runs_with_jobs(&repo, token.as_deref(), &workflow, limit.unwrap_or(21)),
+    );
+    Ok(json!({"issues": issues?, "runs": runs?}))
+}
+
+#[tauri::command]
+async fn github_runs(state: State<'_, AppState>) -> Result<Value> {
+    let repo = github_repo(&state)?;
+    let workflows = github::dispatchable_workflows(&state.repo()?);
+    let runs = state.github.recent_runs(&repo, state.github_token().as_deref()).await?;
+    Ok(json!({"runs": runs, "dispatchable": workflows, "tokenPresent": state.github_token().is_some()}))
+}
+
+/// Starts a workflow by hand. Only files in .github/workflows with a workflow_dispatch trigger qualify.
+#[tauri::command]
+async fn github_dispatch(state: State<'_, AppState>, workflow: String, git_ref: String) -> Result<()> {
+    let repo_dir = state.repo()?;
+    if !github::dispatchable_workflows(&repo_dir).iter().any(|w| w["file"] == workflow.as_str()) {
+        return Err(AppError::new("github", "not_dispatchable", format!("{workflow} has no workflow_dispatch trigger in this repository")));
+    }
+    if git_ref.is_empty() || git_ref.starts_with('-') || git_ref.chars().any(char::is_whitespace) {
+        return Err(AppError::new("github", "invalid_ref", "Not a branch name"));
+    }
+    let token = state
+        .github_token()
+        .ok_or_else(|| AppError::new("github", "token_missing", "Starting a workflow needs GITHUB_TOKEN (with Actions: write) in Settings"))?;
+    state.github.dispatch(&github_repo(&state)?, &token, &workflow, &git_ref).await
+}
+
 /// Opens a GitHub page in the browser. Nothing else: the webview can't open arbitrary URLs.
 #[tauri::command]
 fn open_url(app: AppHandle, url: String) -> Result<()> {
@@ -340,6 +396,11 @@ pub fn run() {
             commit_diff,
             propose,
             open_url,
+            github_pulls,
+            github_pull_details,
+            github_drift,
+            github_runs,
+            github_dispatch,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the GitOps app")

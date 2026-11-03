@@ -11,6 +11,7 @@ export type Page =
   | { name: "problems" }
   | { name: "changes" }
   | { name: "compare" }
+  | { name: "github"; tab?: string }
   | { name: "settings" };
 
 interface RepoState {

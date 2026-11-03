@@ -24,6 +24,11 @@
     "allow-file-history",
     "allow-commit-diff",
     "allow-propose",
-    "allow-open-url"
+    "allow-open-url",
+    "allow-github-pulls",
+    "allow-github-pull-details",
+    "allow-github-drift",
+    "allow-github-runs",
+    "allow-github-dispatch"
   ]
 }

@@ -182,6 +182,45 @@ export const demo = {
           return { proposed: { branch: p.branch, commit: "f00dfeed", fromBranch: "develop", pushed: true, pushError: null }, base: "develop",
             pullRequest: null, compareUrl: `https://github.com/emmanuelalozie/gitops/compare/develop...${p.branch}?expand=1`, pullRequestError: null };
         }
+        case "github_pulls":
+          return [{ number: 17, title: "Recolour the drift label", author: "emmanuelalozie", branch: "gitops/recolour-drift", sha: "abc1234def",
+            base: "develop", draft: false, url: "https://github.com/emmanuelalozie/gitops/pull/17", updatedAt: new Date(Date.now() - 3_600_000).toISOString() }];
+        case "github_pull_details":
+          return {
+            files: [{ path: "config/github/labels/drift.json", status: "modified", additions: 1, deletions: 1 }],
+            checks: [
+              { name: "Build, test, validate", status: "completed", conclusion: "success", url: "" },
+              { name: "Apply and verify (dev mock)", status: "completed", conclusion: "success", url: "" },
+              { name: "plan", status: "in_progress", conclusion: null, url: "" },
+            ],
+            planComment: { author: "github-actions[bot]", updatedAt: new Date().toISOString(), url: "https://github.com/emmanuelalozie/gitops/pull/17",
+              body: "## GitOps plan\n\nWhat the Apply workflow will change when this pull request is merged.\n\n### Plan for `github` (labels @ emmanuelalozie/gitops)\n\n**Plan: 0 to create, 1 to update, 0 to delete.**\n\n| Action | Resource | Changes |\n|---|---|---|\n| ~ update | `drift` | `color`: \"d93f0b\" → \"b60205\" |\n\n9 live resource(s) are not in Git and are left alone because prune is off.\n\n### Plan for `prod` (users @ https://jsonplaceholder.typicode.com)\n\nNo changes. Live state matches Git." },
+          };
+        case "github_drift": {
+          const day = 86_400_000;
+          const runs = Array.from({ length: 14 }, (_, i) => {
+            const at = new Date(Date.now() - (13 - i) * day).toISOString();
+            const drift = (t: string) => (t === "prod" && i >= 9 && i <= 11) || (t === "github" && i === 4);
+            return { id: 1000 + i, event: "schedule", status: "completed", conclusion: "success", branch: "develop", createdAt: at,
+              url: "https://github.com/emmanuelalozie/gitops/actions", jobs: ["github", "github-branches", "github-repo", "prod"].map((t) => ({
+                name: `Drift in ${t}`, status: "completed", conclusion: drift(t) ? "failure" : "success", url: "" })) };
+          });
+          return { runs, issues: [
+            { number: 15, title: "Drift detected in prod", state: "closed", createdAt: new Date(Date.now() - 4 * day).toISOString(),
+              closedAt: new Date(Date.now() - 1.5 * day).toISOString(), comments: 2, url: "https://github.com/emmanuelalozie/gitops/issues/15" },
+            { number: 9, title: "Drift detected in github", state: "closed", createdAt: new Date(Date.now() - 9 * day).toISOString(),
+              closedAt: new Date(Date.now() - 8 * day).toISOString(), comments: 0, url: "https://github.com/emmanuelalozie/gitops/issues/9" },
+          ] };
+        }
+        case "github_runs":
+          return { tokenPresent: tokens.get("GITHUB_TOKEN") ?? false,
+            dispatchable: [{ file: "apply.yml", name: "Apply" }, { file: "drift.yml", name: "Drift detection" }],
+            runs: ["CI", "Plan", "Drift detection", "CI"].map((w, i) => ({ id: 2000 + i, workflow: w, event: w === "Drift detection" ? "schedule" : "pull_request",
+              status: "completed", conclusion: i === 2 ? "failure" : "success", branch: "develop", title: w === "Drift detection" ? "Drift detection" : "Recolour the drift label",
+              createdAt: new Date(Date.now() - i * 3_600_000).toISOString(), url: "https://github.com/emmanuelalozie/gitops/actions" })) };
+        case "github_dispatch":
+          if (!tokens.get("GITHUB_TOKEN")) throw { kind: "github", code: "token_missing", message: "Starting a workflow needs GITHUB_TOKEN (with Actions: write) in Settings" };
+          return null;
         case "token_status":
           return (args.names as string[]).map((name) => ({ name, present: tokens.get(name) ?? false }));
         case "set_token":

@@ -2,8 +2,8 @@
 // (npm run dev, or screenshots) they go to the demo backend in demo.ts, which serves the fixtures.
 
 import type {
-  AppError, AppInfo, Commit, ConfigChange, EngineVersion, Json, Lint, Plan, Problem, Proposal, ProposeResult, RepoInfo,
-  RepoStatus, Resource, ResourceEntry, Target, TokenStatus, Validation,
+  AppError, AppInfo, Commit, ConfigChange, DriftData, EngineVersion, Json, Lint, Plan, Problem, Proposal, ProposeResult,
+  PullDetails, PullRequest, RepoInfo, RepoStatus, Resource, ResourceEntry, RunsData, Target, TokenStatus, Validation,
 } from "./types";
 import { demo } from "./demo";
 
@@ -74,6 +74,11 @@ export const api = {
   history: (path: string, limit = 100) => call<Commit[]>("file_history", { path, limit }),
   commitDiff: (sha: string, path: string) => call<string>("commit_diff", { sha, path }),
   propose: (proposal: Proposal) => call<ProposeResult>("propose", { proposal }),
+  pulls: () => call<PullRequest[]>("github_pulls"),
+  pullDetails: (number: number, sha: string) => call<PullDetails>("github_pull_details", { number, sha }),
+  drift: (workflow = "drift.yml", limit = 21) => call<DriftData>("github_drift", { workflow, limit }),
+  runs: () => call<RunsData>("github_runs"),
+  dispatch: (workflow: string, gitRef: string) => call<void>("github_dispatch", { workflow, gitRef }),
   openUrl: (url: string) => (inDesktop ? call<void>("open_url", { url }) : Promise.resolve(void window.open(url, "_blank", "noopener"))),
 
   pickFolder: async (): Promise<string | null> => {

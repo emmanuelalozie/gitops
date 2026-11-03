@@ -73,12 +73,6 @@ pub struct GitHubRepo {
     pub name: String,
 }
 
-impl GitHubRepo {
-    pub fn full_name(&self) -> String {
-        format!("{}/{}", self.owner, self.name)
-    }
-}
-
 /// Reads owner/name from https://github.com/o/r(.git), git@github.com:o/r(.git) or ssh://git@github.com/o/r.
 pub fn parse_github_remote(url: &str) -> Option<GitHubRepo> {
     let url = url.trim();
@@ -392,7 +386,7 @@ pub(crate) mod tests {
         run(dir.path(), &["remote", "add", "origin", "git@github.com:octo/repo.git"]).unwrap();
         let status = status(dir.path()).unwrap();
         assert_eq!(status.branch.as_deref(), Some("develop"));
-        assert_eq!(status.github.unwrap().full_name(), "octo/repo");
+        assert_eq!(status.github, Some(GitHubRepo { owner: "octo".into(), name: "repo".into() }));
         assert!(!status.shallow);
     }
 

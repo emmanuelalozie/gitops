@@ -176,3 +176,70 @@ export interface ProposeResult {
   compareUrl: string | null;
   pullRequestError: AppError | null;
 }
+
+export interface PullRequest {
+  number: number;
+  title: string;
+  author: string;
+  branch: string;
+  sha: string;
+  base: string;
+  draft: boolean;
+  url: string;
+  updatedAt: string;
+}
+
+export interface CheckRun {
+  name: string;
+  status: "queued" | "in_progress" | "completed" | string;
+  conclusion: "success" | "failure" | "neutral" | "cancelled" | "skipped" | "timed_out" | "action_required" | null | string;
+  url: string;
+}
+
+export interface PullDetails {
+  files: { path: string; status: string; additions: number; deletions: number }[];
+  checks: CheckRun[];
+  planComment: { body: string; updatedAt: string; url: string; author: string } | null;
+}
+
+export interface WorkflowJob {
+  name: string;
+  status: string;
+  conclusion: string | null;
+  url: string;
+}
+
+export interface WorkflowRun {
+  id: number;
+  workflow?: string;
+  path?: string;
+  title?: string;
+  event: string;
+  status: string;
+  conclusion: string | null;
+  branch: string;
+  createdAt: string;
+  url: string;
+  jobs?: WorkflowJob[];
+}
+
+export interface DriftIssue {
+  number: number;
+  title: string;
+  state: "open" | "closed";
+  createdAt: string;
+  closedAt: string | null;
+  comments: number;
+  url: string;
+}
+
+export interface DriftData {
+  issues: DriftIssue[];
+  runs: WorkflowRun[];
+}
+
+export interface RunsData {
+  runs: WorkflowRun[];
+  dispatchable: { file: string; name: string }[];
+  tokenPresent: boolean;
+}
