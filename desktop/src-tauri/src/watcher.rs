@@ -57,7 +57,7 @@ mod tests {
     #[test]
     fn reports_bursts_of_changes_once_with_relative_paths() {
         let dir = tempfile::tempdir().unwrap();
-        let repo = dir.path().canonicalize().unwrap();
+        let repo = dunce::canonicalize(dir.path()).unwrap();
         std::fs::create_dir_all(repo.join("config/dev/users")).unwrap();
         let (sender, receiver) = mpsc::channel();
         let _watcher = watch(&repo, move |paths| sender.send(paths).unwrap()).unwrap();

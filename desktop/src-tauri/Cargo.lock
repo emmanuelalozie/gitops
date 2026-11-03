@@ -1409,6 +1409,7 @@ dependencies = [
 name = "gitops-desktop"
 version = "0.2.0"
 dependencies = [
+ "dunce",
  "futures-util",
  "keyring",
  "notify",

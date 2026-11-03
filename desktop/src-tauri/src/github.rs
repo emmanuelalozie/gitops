@@ -133,7 +133,7 @@ impl GitHub {
         let files_path = Self::repo_path(repo, &format!("/pulls/{number}/files?per_page=100"));
         let checks_path = Self::repo_path(repo, &format!("/commits/{sha}/check-runs?per_page=100"));
         let comments_path = Self::repo_path(repo, &format!("/issues/{number}/comments?per_page=100"));
-        let (files, checks, comments) = futures_util::join!(
+        let (files, checks, comments) = tokio::join!(
             self.get(&files_path, token),
             self.get(&checks_path, token),
             self.get(&comments_path, token),

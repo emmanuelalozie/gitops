@@ -124,7 +124,8 @@ tasks.register('engineRuntime', Exec) {
     doFirst {
         delete(runtime)
         def javaHome = launcher.get().metadata.installationPath.asFile
-        commandLine new File(javaHome, 'bin/jlink').absolutePath,
+        def jlink = System.getProperty('os.name').toLowerCase().contains('win') ? 'bin/jlink.exe' : 'bin/jlink'
+        commandLine new File(javaHome, jlink).absolutePath,
                 '--add-modules', engineModules.join(','),
                 '--strip-debug', '--no-header-files', '--no-man-pages', '--compress', 'zip-9',
                 '--output', runtime.get().asFile.absolutePath

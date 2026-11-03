@@ -343,7 +343,7 @@ mod tests {
     /// engine hasn't been built (CI builds it first).
     #[tokio::test]
     async fn talks_to_the_real_engine() {
-        let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().unwrap();
+        let repo = dunce::canonicalize(Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).unwrap();
         let Ok(location) = locate(None, None, &repo, std::env::var_os("JAVA_HOME").map(PathBuf::from)) else {
             eprintln!("skipped: run ./gradlew engineBundle first");
             return;

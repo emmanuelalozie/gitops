@@ -131,8 +131,8 @@ fn app_info(state: State<'_, AppState>) -> AppInfo {
 
 #[tauri::command]
 async fn open_repo(app: AppHandle, state: State<'_, AppState>, path: String) -> Result<RepoInfo> {
-    let repo = PathBuf::from(&path)
-        .canonicalize()
+    // dunce, not std: on Windows std gives \\?\C:\... paths, which Java and some git builds refuse.
+    let repo = dunce::canonicalize(PathBuf::from(&path))
         .map_err(|e| AppError::repo(format!("Can't open {path}: {e}")))?;
     if !repo.join("config").is_dir() {
         return Err(AppError::repo(format!(
@@ -352,7 +352,7 @@ async fn github_drift(state: State<'_, AppState>, workflow: Option<String>, limi
     let repo = github_repo(&state)?;
     let token = state.github_token();
     let workflow = workflow.unwrap_or_else(|| "drift.yml".into());
-    let (issues, runs) = futures_util::join!(
+    let (issues, runs) = tokio::join!(
         state.github.drift_issues(&repo, token.as_deref()),
         state.github.workflow_runs_with_jobs(&repo, token.as_deref(), &workflow, limit.unwrap_or(21)),
     );
@@ -451,7 +451,7 @@ mod tests {
     /// Against this repository's own config: dev sets localApply, prod doesn't. Skipped without a built engine.
     #[tokio::test]
     async fn only_local_apply_targets_with_a_plan_id_get_through() {
-        let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().unwrap();
+        let repo = dunce::canonicalize(Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).unwrap();
         let Ok(location) = engine::locate(None, None, &repo, std::env::var_os("JAVA_HOME").map(PathBuf::from)) else {
             eprintln!("skipped: run ./gradlew engineBundle first");
             return;
