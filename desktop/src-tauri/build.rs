@@ -29,6 +29,9 @@ const COMMANDS: &[&str] = &[
     "blame_field",
     "audit_log",
     "github_workflow_runs",
+    "switch_repo",
+    "workspace",
+    "workspace_call",
 ];
 
 fn main() {

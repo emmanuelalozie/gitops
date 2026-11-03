@@ -9,7 +9,7 @@ import { Counts, ErrorBox, Spinner } from "./ui";
  * Applies the plan the person is looking at, and only that plan: the engine refuses if the live system moved
  * since (plan_changed). Only targets with "localApply" get here, and only after typing the target's name.
  */
-export function ApplyDialog({ target, plan, onClose }: { target: Target; plan: Plan; onClose: (applied: boolean) => void }) {
+export function ApplyDialog({ target, plan, onClose, repoPath }: { target: Target; plan: Plan; onClose: (applied: boolean) => void; repoPath?: string }) {
   const [typed, setTyped] = useState("");
   const [phase, setPhase] = useState<"confirm" | "running" | "done">("confirm");
   const [events, setEvents] = useState<ApplyProgress[]>([]);
@@ -22,11 +22,11 @@ export function ApplyDialog({ target, plan, onClose }: { target: Target; plan: P
   }, []);
   useEffect(() => {
     const off = api.on("engine-notification", (payload) => {
-      const { method, params } = payload as { method: string; params: ApplyProgress };
-      if (method === "apply.progress" && params.target === target.name) setEvents((e) => [...e, params]);
+      const { method, params, repo } = payload as { method: string; params: ApplyProgress; repo?: string };
+      if (method === "apply.progress" && params.target === target.name && (!repo || repo === repoPath)) setEvents((e) => [...e, params]);
     });
     return () => void off.then((f) => f());
-  }, [target.name]);
+  }, [target.name, repoPath]);
 
   const run = async () => {
     setPhase("running");

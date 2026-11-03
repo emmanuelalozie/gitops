@@ -320,3 +320,11 @@ export interface SearchResult {
   results: SearchHit[];
   truncated: boolean;
 }
+
+export interface WorkspaceEntry {
+  path: string;
+  name: string;
+  active: boolean;
+  git: RepoStatus | null;
+  engineAlive: boolean;
+}

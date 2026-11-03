@@ -146,3 +146,12 @@ describe("operations views", () => {
     await waitFor(() => expect(screen.getByText(/across 1 of/)).toBeTruthy(), { timeout: 3000 });
   });
 });
+
+it("shows every open repository in the workspace", async () => {
+  render(<App />);
+  fireEvent.click(await screen.findByText("Open a repository…"));
+  fireEvent.click(await screen.findByText("Workspace"));
+  expect(await screen.findByText("platform-config")).toBeTruthy();
+  await waitFor(() => expect(screen.getAllByText("prod").length).toBeGreaterThanOrEqual(2), { timeout: 4000 });
+  expect(screen.getByLabelText("Switch repository")).toBeTruthy();
+});

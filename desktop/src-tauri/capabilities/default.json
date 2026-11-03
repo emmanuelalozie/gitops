@@ -36,6 +36,9 @@
     "allow-revert-change",
     "allow-blame-field",
     "allow-audit-log",
-    "allow-github-workflow-runs"
+    "allow-github-workflow-runs",
+    "allow-switch-repo",
+    "allow-workspace",
+    "allow-workspace-call"
   ]
 }

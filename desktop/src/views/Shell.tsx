@@ -2,6 +2,10 @@ import type { ReactNode } from "react";
 import { health } from "../lib/model";
 import { inDesktop } from "../lib/api";
 import { useRepo, type Page } from "../state";
+import { useWorkspace } from "../workspace";
+import { useEffect, useState } from "react";
+import { api as engineApi } from "../lib/api";
+import type { WorkspaceEntry } from "../lib/types";
 
 function NavButton({ page, current, children, count, tone }: { page: Page; current: Page; children: ReactNode; count?: number; tone?: "info" }) {
   const { go } = useRepo();
@@ -16,6 +20,11 @@ function NavButton({ page, current, children, count, tone }: { page: Page; curre
 
 export function Shell({ children }: { children: ReactNode }) {
   const { repo, targets, plans, page, validation, lint, changeCount, close, go } = useRepo();
+  const workspace = useWorkspace();
+  const [open, setOpen] = useState<WorkspaceEntry[]>([]);
+  useEffect(() => {
+    void engineApi.workspace().then(setOpen).catch(() => undefined);
+  }, [repo.path]);
   const problemCount =
     (validation.state === "ok" ? validation.value.targets.reduce((n, t) => n + t.problems.length, 0) : 0) +
     (lint.state === "ok" ? lint.value.findings.length : 0);
@@ -29,6 +38,15 @@ export function Shell({ children }: { children: ReactNode }) {
             {repo.git.github && <span> · {repo.git.github.owner}/{repo.git.github.name}</span>}
           </div>
           {!inDesktop && <div className="demo-pill">Demo data</div>}
+          <div className="repo-switch">
+            {open.length > 1 && (
+              <select aria-label="Switch repository" value={repo.path} onChange={(e) => void workspace.switchTo(e.target.value)}>
+                {open.map((r) => <option key={r.path} value={r.path}>{r.name}</option>)}
+              </select>
+            )}
+            <button className="link small" onClick={() => void workspace.openAnother()}>Open another…</button>
+            {open.length > 1 && <button className="link small" onClick={() => go({ name: "workspace" })}>Workspace</button>}
+          </div>
         </div>
         <div className="search-box">
           <input type="search" placeholder="Search resources…" aria-label="Search resources in every target"

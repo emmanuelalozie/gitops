@@ -2,7 +2,7 @@
 // (npm run dev, or screenshots) they go to the demo backend in demo.ts, which serves the fixtures.
 
 import type {
-  AppError, AppInfo, ApplyResult, AuditEntry, Blame, Commit, HealthResult, MockStatus, SearchResult, WatchSettings, WorkflowRun, ConfigChange, DriftData, EngineVersion, Json, Lint, Plan, Problem, Proposal, ProposeResult,
+  AppError, AppInfo, ApplyResult, AuditEntry, WorkspaceEntry, Blame, Commit, HealthResult, MockStatus, SearchResult, WatchSettings, WorkflowRun, ConfigChange, DriftData, EngineVersion, Json, Lint, Plan, Problem, Proposal, ProposeResult,
   PullDetails, PullRequest, RepoInfo, RepoStatus, Resource, ResourceEntry, RunsData, Target, TokenStatus, Validation,
 } from "./types";
 import { demo } from "./demo";
@@ -45,7 +45,12 @@ function engine<T>(method: string, params: Record<string, unknown> = {}): Promis
 export const api = {
   appInfo: () => call<AppInfo>("app_info"),
   openRepo: (path: string) => call<RepoInfo>("open_repo", { path }),
-  closeRepo: () => call<void>("close_repo"),
+  /** Closes a repository (the active one by default); returns the one that's active now, if any. */
+  closeRepo: (path?: string) => call<RepoInfo | null>("close_repo", { path }),
+  switchRepo: (path: string) => call<RepoInfo>("switch_repo", { path }),
+  workspace: () => call<WorkspaceEntry[]>("workspace"),
+  workspaceTargets: (path: string) => call<{ targets: Target[] }>("workspace_call", { path, method: "targets.list" }).then((r) => r.targets),
+  workspacePlan: (path: string, target: string) => call<Plan>("workspace_call", { path, method: "plan.compute", params: { target } }),
   repoStatus: () => call<RepoStatus>("repo_status"),
   restartEngine: () => call<EngineVersion>("restart_engine"),
   engineInfo: () => call<EngineVersion>("engine_info"),

@@ -242,6 +242,15 @@ export const demo = {
           return delay(repo, 300);
         case "close_repo":
           return null;
+        case "switch_repo":
+          return repo;
+        case "workspace":
+          return [
+            { path: repo.path, name: repo.name, active: true, git: repo.git, engineAlive: true },
+            { path: "/demo/platform-config", name: "platform-config", active: false, git: { ...repo.git, github: { owner: "emmanuelalozie", name: "platform-config" } }, engineAlive: true },
+          ];
+        case "workspace_call":
+          return engineCall(String(args.method), (args.params as Record<string, unknown>) ?? {});
         case "repo_status":
           return repo.git;
         case "engine_info":

@@ -364,6 +364,13 @@ mark { background: var(--update-bg); color: var(--text); border-radius: 2px; }
 .why p { margin: 4px 0; }
 .revert-row { margin-bottom: 8px; }
 
+.repo-switch { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+.repo-switch select { max-width: 100%; }
+.workspace-repo { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; margin-bottom: 12px; }
+.workspace-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 8px; }
+.workspace-targets { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 6px; }
+.workspace-target { display: flex; gap: 8px; align-items: center; }
+
 @media (prefers-reduced-motion: reduce) {
   .spin, .health-loading .dot, .dot.health-loading { animation: none; }
 }

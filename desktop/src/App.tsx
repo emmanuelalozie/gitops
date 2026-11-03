@@ -1,4 +1,6 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { WorkspaceContext, type Workspace } from "./workspace";
+import { WorkspacePage } from "./views/Workspace";
 import { api } from "./lib/api";
 import type { RepoInfo } from "./lib/types";
 import { RepoProvider, useRepo } from "./state";
@@ -20,17 +22,26 @@ import { Welcome } from "./views/Welcome";
 export function App() {
   const [repo, setRepo] = useState<RepoInfo | null>(null);
   const close = useCallback(() => {
-    void api.closeRepo();
-    setRepo(null);
+    // Closing one repository shows the next open one, or the welcome screen.
+    void api.closeRepo().then(setRepo, () => setRepo(null));
   }, []);
+  const workspace = useMemo<Workspace>(() => ({
+    switchTo: async (path: string) => setRepo(await api.switchRepo(path)),
+    openAnother: async () => {
+      const path = await api.pickFolder();
+      if (path) setRepo(await api.openRepo(path));
+    },
+  }), []);
   if (!repo) return <Welcome onOpen={setRepo} />;
   return (
-    // Keyed by path: opening another repository starts from a clean state.
-    <RepoProvider key={repo.path} initial={repo} onClose={close}>
-      <Shell>
-        <Router />
-      </Shell>
-    </RepoProvider>
+    <WorkspaceContext.Provider value={workspace}>
+      {/* Keyed by path: switching repository starts that one's view from a clean state. */}
+      <RepoProvider key={repo.path} initial={repo} onClose={close}>
+        <Shell>
+          <Router />
+        </Shell>
+      </RepoProvider>
+    </WorkspaceContext.Provider>
   );
 }
 
@@ -53,6 +64,8 @@ function Router() {
       return <Graph />;
     case "add-target":
       return <AddTarget />;
+    case "workspace":
+      return <WorkspacePage />;
     case "all-changes":
       return <AllChanges />;
     case "audit":

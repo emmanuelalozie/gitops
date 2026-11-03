@@ -20,6 +20,7 @@ use serde_json::{json, Value};
 use settings::Settings;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_notification::NotificationExt;
@@ -27,31 +28,34 @@ use tauri_plugin_opener::OpenerExt;
 
 /// An open repository: its engine and the watcher on its files.
 struct Session {
-    repo: PathBuf,
     engine: Arc<Engine>,
     engine_info: Value,
+    /// The token generation the engine started with; a later one means it needs a restart to see new tokens.
+    generation: u64,
     _watcher: Option<notify::RecommendedWatcher>,
 }
 
+/// Several repositories can be open at once (the workspace); commands act on the active one.
 pub struct AppState {
-    session: Mutex<Option<Session>>,
+    sessions: Mutex<HashMap<PathBuf, Session>>,
+    active: Mutex<Option<PathBuf>>,
+    /// Bumped whenever a token is set or removed.
+    token_generation: AtomicU64,
     github: github::GitHub,
     settings: Mutex<Settings>,
     settings_file: PathBuf,
+    /// Whether the "still watching in the tray" notice was shown this run.
+    told_about_tray: AtomicBool,
 }
 
 impl AppState {
     fn engine(&self) -> Result<Arc<Engine>> {
-        self.session
-            .lock()
-            .unwrap()
-            .as_ref()
-            .map(|s| s.engine.clone())
-            .ok_or_else(|| AppError::repo("No repository is open"))
+        let repo = self.repo()?;
+        self.sessions.lock().unwrap().get(&repo).map(|s| s.engine.clone()).ok_or_else(|| AppError::repo("No repository is open"))
     }
 
     fn repo(&self) -> Result<PathBuf> {
-        self.session.lock().unwrap().as_ref().map(|s| s.repo.clone()).ok_or_else(|| AppError::repo("No repository is open"))
+        self.active.lock().unwrap().clone().ok_or_else(|| AppError::repo("No repository is open"))
     }
 
     fn github_token(&self) -> Option<String> {
@@ -107,19 +111,39 @@ async fn start_engine(app: &AppHandle, state: &AppState, repo: &Path) -> Result<
     )?;
     let env = token_env(&state.settings.lock().unwrap());
     let handle = app.clone();
+    let repo_name = repo.display().to_string();
     let engine = Arc::new(Engine::start(&location, repo, &env, move |method, params| {
-        let _ = handle.emit("engine-notification", json!({"method": method, "params": params}));
+        let _ = handle.emit("engine-notification", json!({"repo": repo_name, "method": method, "params": params}));
     })?);
     let info = engine.handshake().await?;
     Ok((engine, info))
 }
 
-/// Replaces the session; the old engine is stopped off the async runtime, since stopping can wait a little.
-fn replace_session(state: &AppState, next: Option<Session>) {
-    let previous = std::mem::replace(&mut *state.session.lock().unwrap(), next);
-    if let Some(previous) = previous {
-        std::thread::spawn(move || drop(previous));
-    }
+/// Stops a session's engine off the async runtime, since stopping can wait a little.
+fn drop_later(session: Session) {
+    std::thread::spawn(move || drop(session));
+}
+
+fn repo_info(repo: &Path, engine_info: Value) -> Result<RepoInfo> {
+    Ok(RepoInfo {
+        name: repo.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+        path: repo.to_path_buf(),
+        git: git::status(repo)?,
+        engine: engine_info,
+    })
+}
+
+/// Starts the engine and file watcher of a repository. Events say which repository they're about.
+async fn start_session(app: &AppHandle, state: &AppState, repo: &Path) -> Result<Session> {
+    let generation = state.token_generation.load(Ordering::SeqCst);
+    let (engine, engine_info) = start_engine(app, state, repo).await?;
+    let handle = app.clone();
+    let repo_name = repo.display().to_string();
+    let watcher = watcher::watch(repo, move |paths| {
+        let _ = handle.emit("repo-changed", json!({"repo": repo_name, "paths": paths}));
+    })
+    .ok();
+    Ok(Session { engine, engine_info, generation, _watcher: watcher })
 }
 
 #[tauri::command]
@@ -136,27 +160,115 @@ async fn open_repo(app: AppHandle, state: State<'_, AppState>, path: String) -> 
     // Plain C:\... paths on Windows (Java and some git builds refuse \\?\C:\...).
     let repo = repo_check::resolve(&path)?;
     repo_check::check(&repo)?;
-    let git = git::status(&repo)?;
-    let (engine, engine_info) = start_engine(&app, &state, &repo).await?;
-    let handle = app.clone();
-    let watcher = watcher::watch(&repo, move |paths| {
-        let _ = handle.emit("repo-changed", json!({"paths": paths}));
-    })
-    .ok();
-    replace_session(&state, Some(Session { repo: repo.clone(), engine, engine_info: engine_info.clone(), _watcher: watcher }));
+    git::status(&repo)?;
+    let open = state.sessions.lock().unwrap().contains_key(&repo);
+    if !open {
+        let session = start_session(&app, &state, &repo).await?;
+        if let Some(old) = state.sessions.lock().unwrap().insert(repo.clone(), session) {
+            drop_later(old);
+        }
+    }
+    *state.active.lock().unwrap() = Some(repo.clone());
     state.settings.lock().unwrap().remember_repo(&repo);
     state.save_settings()?;
-    Ok(RepoInfo {
-        name: repo.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
-        path: repo,
-        git,
-        engine: engine_info,
-    })
+    activate(&app, &state, &repo).await
+}
+
+/// Makes an open repository the active one, restarting its engine first if tokens changed while it was in the
+/// background.
+async fn activate(app: &AppHandle, state: &AppState, repo: &Path) -> Result<RepoInfo> {
+    let stale = state
+        .sessions
+        .lock()
+        .unwrap()
+        .get(repo)
+        .map(|s| s.generation != state.token_generation.load(Ordering::SeqCst))
+        .ok_or_else(|| AppError::repo(format!("{} isn't open", repo.display())))?;
+    if stale {
+        let fresh = start_session(app, state, repo).await?;
+        if let Some(old) = state.sessions.lock().unwrap().insert(repo.to_path_buf(), fresh) {
+            drop_later(old);
+        }
+    }
+    *state.active.lock().unwrap() = Some(repo.to_path_buf());
+    let info = state.sessions.lock().unwrap().get(repo).map(|s| s.engine_info.clone()).unwrap_or(Value::Null);
+    repo_info(repo, info)
 }
 
 #[tauri::command]
-fn close_repo(state: State<'_, AppState>) {
-    replace_session(&state, None);
+async fn switch_repo(app: AppHandle, state: State<'_, AppState>, path: String) -> Result<RepoInfo> {
+    activate(&app, &state, Path::new(&path)).await
+}
+
+/// Closes a repository (the active one when no path is given) and returns the one that's active now, if any.
+#[tauri::command]
+async fn close_repo(app: AppHandle, state: State<'_, AppState>, path: Option<String>) -> Result<Option<RepoInfo>> {
+    let repo = match path {
+        Some(p) => PathBuf::from(p),
+        None => match state.repo() {
+            Ok(r) => r,
+            Err(_) => return Ok(None),
+        },
+    };
+    if let Some(old) = state.sessions.lock().unwrap().remove(&repo) {
+        drop_later(old);
+    }
+    let next = {
+        let mut active = state.active.lock().unwrap();
+        if active.as_ref() == Some(&repo) {
+            *active = state.sessions.lock().unwrap().keys().next().cloned();
+        }
+        active.clone()
+    };
+    match next {
+        Some(next) => Ok(Some(activate(&app, &state, &next).await?)),
+        None => Ok(None),
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceEntry {
+    path: PathBuf,
+    name: String,
+    active: bool,
+    git: Option<git::RepoStatus>,
+    engine_alive: bool,
+}
+
+/// Every open repository.
+#[tauri::command]
+fn workspace(state: State<'_, AppState>) -> Vec<WorkspaceEntry> {
+    let active = state.active.lock().unwrap().clone();
+    let sessions = state.sessions.lock().unwrap();
+    let mut list: Vec<WorkspaceEntry> = sessions
+        .iter()
+        .map(|(path, session)| WorkspaceEntry {
+            name: path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+            active: active.as_ref() == Some(path),
+            git: git::status(path).ok(),
+            engine_alive: session.engine.is_alive(),
+            path: path.clone(),
+        })
+        .collect();
+    list.sort_by(|a, b| a.name.cmp(&b.name));
+    list
+}
+
+/// Read-only engine calls on any open repository, for the workspace overview.
+#[tauri::command]
+async fn workspace_call(state: State<'_, AppState>, path: String, method: String, params: Option<Value>) -> Result<Value> {
+    if !["targets.list", "plan.compute", "config.validate"].contains(&method.as_str()) {
+        return Err(AppError::new("engine", "not_allowed", format!("The workspace view doesn't call '{method}'")));
+    }
+    let engine = state
+        .sessions
+        .lock()
+        .unwrap()
+        .get(Path::new(&path))
+        .map(|s| s.engine.clone())
+        .ok_or_else(|| AppError::repo(format!("{path} isn't open")))?;
+    engine.call(&method, params.unwrap_or_else(|| json!({}))).await
 }
 
 #[tauri::command]
@@ -200,11 +312,13 @@ async fn check_local_apply(engine: &Engine, params: &Value) -> Result<()> {
 #[tauri::command]
 async fn restart_engine(app: AppHandle, state: State<'_, AppState>) -> Result<Value> {
     let repo = state.repo()?;
+    let generation = state.token_generation.load(Ordering::SeqCst);
     let (engine, info) = start_engine(&app, &state, &repo).await?;
-    let mut session = state.session.lock().unwrap();
-    if let Some(session) = session.as_mut() {
+    let mut sessions = state.sessions.lock().unwrap();
+    if let Some(session) = sessions.get_mut(&repo) {
         let old = std::mem::replace(&mut session.engine, engine);
         session.engine_info = info.clone();
+        session.generation = generation;
         std::thread::spawn(move || drop(old));
     }
     Ok(info)
@@ -212,8 +326,9 @@ async fn restart_engine(app: AppHandle, state: State<'_, AppState>) -> Result<Va
 
 #[tauri::command]
 fn engine_info(state: State<'_, AppState>) -> Result<Value> {
-    let session = state.session.lock().unwrap();
-    let session = session.as_ref().ok_or_else(|| AppError::repo("No repository is open"))?;
+    let repo = state.repo()?;
+    let sessions = state.sessions.lock().unwrap();
+    let session = sessions.get(&repo).ok_or_else(|| AppError::repo("No repository is open"))?;
     let mut info = session.engine_info.clone();
     info["alive"] = json!(session.engine.is_alive());
     Ok(info)
@@ -238,6 +353,7 @@ fn token_status(state: State<'_, AppState>, names: Vec<String>) -> Result<Vec<To
 #[tauri::command]
 fn set_token(state: State<'_, AppState>, name: String, value: String) -> Result<()> {
     secrets::set(&name, &value)?;
+    state.token_generation.fetch_add(1, Ordering::SeqCst);
     state.settings.lock().unwrap().remember_token(&name, true);
     state.save_settings()
 }
@@ -245,6 +361,7 @@ fn set_token(state: State<'_, AppState>, name: String, value: String) -> Result<
 #[tauri::command]
 fn clear_token(state: State<'_, AppState>, name: String) -> Result<()> {
     secrets::delete(&name)?;
+    state.token_generation.fetch_add(1, Ordering::SeqCst);
     state.settings.lock().unwrap().remember_token(&name, false);
     state.save_settings()
 }
@@ -460,6 +577,40 @@ fn open_url(app: AppHandle, url: String) -> Result<()> {
     app.opener().open_url(url, None::<&str>).map_err(|e| AppError::internal(e.to_string()))
 }
 
+/// The tray (menu bar) icon: open the window again, or quit (which also stops every engine and mock).
+fn tray(app: &tauri::App) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem};
+    use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+    let show = MenuItem::with_id(app, "show", "Open GitOps", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit GitOps", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &quit])?;
+    let mut builder = TrayIconBuilder::with_id("main").tooltip("GitOps").menu(&menu).show_menu_on_left_click(false);
+    if let Some(icon) = app.default_window_icon() {
+        builder = builder.icon(icon.clone());
+    }
+    builder
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "show" => show_window(app),
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                show_window(tray.app_handle());
+            }
+        })
+        .build(app)?;
+    Ok(())
+}
+
+fn show_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -470,12 +621,36 @@ pub fn run() {
             let settings_file = app.path().app_config_dir()?.join("settings.json");
             let api = std::env::var("GITHUB_API_URL").unwrap_or_else(|_| github::API.to_string());
             app.manage(AppState {
-                session: Mutex::new(None),
+                sessions: Mutex::new(HashMap::new()),
+                active: Mutex::new(None),
+                token_generation: AtomicU64::new(0),
+                told_about_tray: AtomicBool::new(false),
                 github: github::GitHub::new(&api)?,
                 settings: Mutex::new(Settings::load(&settings_file)),
                 settings_file,
             });
+            tray(app)?;
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            // While watching for drift, closing the window keeps the app (and the watch) running in the tray.
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let app = window.app_handle();
+                let state = app.state::<AppState>();
+                let watching = state.settings.lock().unwrap().watch.enabled;
+                if watching {
+                    api.prevent_close();
+                    let _ = window.hide();
+                    if !state.told_about_tray.swap(true, Ordering::SeqCst) {
+                        let _ = app
+                            .notification()
+                            .builder()
+                            .title("GitOps is still watching for drift")
+                            .body("It's in the tray (menu bar). Choose Quit there to stop it.")
+                            .show();
+                    }
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             app_info,
@@ -507,6 +682,9 @@ pub fn run() {
             blame_field,
             audit_log,
             github_workflow_runs,
+            switch_repo,
+            workspace,
+            workspace_call,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the GitOps app")
@@ -514,7 +692,7 @@ pub fn run() {
             if let tauri::RunEvent::Exit = event {
                 // Let the engine finish anything running and exit before the app does.
                 if let Some(state) = app.try_state::<AppState>() {
-                    state.session.lock().unwrap().take();
+                    state.sessions.lock().unwrap().clear();
                 }
             }
         });

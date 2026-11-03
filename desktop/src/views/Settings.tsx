@@ -53,8 +53,9 @@ export function Settings() {
       <section>
         <h2>Watch for drift</h2>
         <p className="muted">
-          While the app is open, plan every target on a schedule{repo.git.github ? " and check GitHub for new drift issues" : ""}, and show a
-          desktop notification when one drifts, fails, or is back in sync. Each plan reads the live systems.
+          Plan every target of the repository on screen on a schedule{repo.git.github ? " and check GitHub for new drift issues" : ""}, and show a
+          desktop notification when one drifts, fails, or is back in sync. Each plan reads the live systems. While watching, closing the
+          window keeps GitOps running in the tray (menu bar); quit it from there.
         </p>
         <div className="watch-row">
           <label className="check">

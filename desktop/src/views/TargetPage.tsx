@@ -38,7 +38,7 @@ export function TargetPage({ name }: { name: string }) {
         </div>
       </header>
       {applying && plan?.state === "ok" && (
-        <ApplyDialog target={target} plan={plan.value} onClose={(applied) => { setApplying(false); if (applied) void planTarget(name); }} />
+        <ApplyDialog target={target} plan={plan.value} repoPath={repo.path} onClose={(applied) => { setApplying(false); if (applied) void planTarget(name); }} />
       )}
       <Tabs<Tab>
         tabs={[

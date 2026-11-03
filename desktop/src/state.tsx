@@ -15,6 +15,7 @@ export type Page =
   | { name: "github"; tab?: string }
   | { name: "graph" }
   | { name: "add-target" }
+  | { name: "workspace" }
   | { name: "all-changes" }
   | { name: "audit" }
   | { name: "search"; query: string }
@@ -111,13 +112,16 @@ export function RepoProvider({ initial, onClose, children }: { initial: RepoInfo
   // Files changed (an edit, a branch switch): reload, then re-plan only the targets whose files changed.
   useEffect(() => {
     const off = api.on("repo-changed", (payload) => {
-      const paths = (payload as { paths: string[] }).paths ?? [];
+      // Other open repositories have their own watchers; only this one's changes matter here.
+      const event = payload as { repo?: string; paths: string[] };
+      if (event.repo && event.repo !== repo.path) return;
+      const paths = event.paths ?? [];
       const touched = affectedTargets(paths, targetsRef.current);
       void reload().then(() => touched.forEach((name) => void planTarget(name)));
       void api.repoStatus().then((git) => setRepo((r) => ({ ...r, git }))).catch(() => undefined);
     });
     return () => void off.then((f) => f());
-  }, [reload, planTarget]);
+  }, [reload, planTarget, repo.path]);
 
   // The drift watch: on a schedule, plan every target and look at GitHub's drift issues, and notify about what
   // got worse (or recovered) since the last look. Runs while the app is open.
