@@ -1,6 +1,6 @@
 //! GitOps desktop: a window onto the GitOps engine.
 //!
-//! The split of work (docs/desktop.md): the Java engine owns everything about desired vs live state; this Rust
+//! The split of work (desktop/README.md): the Java engine owns everything about desired vs live state; this Rust
 //! layer runs the engine, keeps tokens in the keychain, watches the repository and runs git; the frontend only
 //! presents. Every command here is listed in build.rs and granted in capabilities/default.json.
 
