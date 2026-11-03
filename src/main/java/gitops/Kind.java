@@ -32,8 +32,17 @@ public final class Kind {
     // GitHub stores variable names in upper case and matches them regardless of case.
     public static final Kind ACTIONS_VARIABLES = builtIn("actions-variables", "name", List.of(), true, Family.GITHUB);
 
+    // GitHub matches environment names regardless of case.
+    public static final Kind ENVIRONMENTS = builtIn("environments", "name", List.of(), true, Family.GITHUB);
+    public static final Kind WEBHOOKS = builtIn("webhooks", "url", List.of(), false, Family.GITHUB);
+    // GitHub logins are case-insensitive.
+    public static final Kind COLLABORATORS = builtIn("collaborators", "login", List.of(), true, Family.GITHUB);
+    public static final Kind TEAMS = builtIn("teams", "slug", List.of(), false, Family.GITHUB);
+    public static final Kind RULESETS = builtIn("rulesets", "name", List.of(), false, Family.GITHUB);
+
     /** The kinds that need no definition in target.json. */
-    public static final List<Kind> BUILT_IN = List.of(USERS, LABELS, REPOSITORY, BRANCH_PROTECTION, ACTIONS_VARIABLES);
+    public static final List<Kind> BUILT_IN = List.of(USERS, LABELS, REPOSITORY, BRANCH_PROTECTION, ACTIONS_VARIABLES,
+            ENVIRONMENTS, WEBHOOKS, COLLABORATORS, TEAMS, RULESETS);
 
     private final String id;
     private final String keyField;

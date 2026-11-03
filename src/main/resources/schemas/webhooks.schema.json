@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GitHub webhook",
+  "description": "A repository webhook, keyed by its URL. One file per webhook in config/<target>/webhooks/. Secrets aren't managed: GitHub never returns them.",
+  "type": "object",
+  "properties": {
+    "url": { "type": "string", "pattern": "^https?://" },
+    "events": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^[a-z_*]+$" } },
+    "active": { "type": "boolean" },
+    "content_type": { "enum": ["json", "form"] }
+  },
+  "required": ["url", "events"],
+  "additionalProperties": false
+}

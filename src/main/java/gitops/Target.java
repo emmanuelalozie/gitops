@@ -237,6 +237,21 @@ public record Target(String name, Path dir, Kind kind, boolean prune, boolean ve
         if (kind.equals(Kind.ACTIONS_VARIABLES)) {
             return new GitHubActionsVariablesProvider(github, endpoint(), token());
         }
+        if (kind.equals(Kind.ENVIRONMENTS)) {
+            return new gitops.providers.GitHubEnvironmentsProvider(github, endpoint(), token());
+        }
+        if (kind.equals(Kind.WEBHOOKS)) {
+            return new gitops.providers.GitHubWebhooksProvider(github, endpoint(), token());
+        }
+        if (kind.equals(Kind.COLLABORATORS)) {
+            return new gitops.providers.GitHubAccessProvider(github, endpoint(), token(), gitops.providers.GitHubAccessProvider.Mode.COLLABORATORS);
+        }
+        if (kind.equals(Kind.TEAMS)) {
+            return new gitops.providers.GitHubAccessProvider(github, endpoint(), token(), gitops.providers.GitHubAccessProvider.Mode.TEAMS);
+        }
+        if (kind.equals(Kind.RULESETS)) {
+            return new gitops.providers.GitHubRulesetsProvider(github, endpoint(), token());
+        }
         throw new IllegalStateException("No provider for kind " + kind);
     }
 

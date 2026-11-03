@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GitHub repository ruleset",
+  "description": "A ruleset, keyed by name, in GitHub's own shape (see the REST API for rulesets). One file per ruleset in config/<target>/rulesets/. Start from ./gradlew snapshot so the file matches what GitHub returns.",
+  "type": "object",
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "target": { "enum": ["branch", "tag", "push"] },
+    "enforcement": { "enum": ["disabled", "active", "evaluate"] },
+    "conditions": { "type": "object" },
+    "rules": { "type": "array", "items": { "type": "object", "required": ["type"] } },
+    "bypass_actors": { "type": "array", "items": { "type": "object" } }
+  },
+  "required": ["name", "enforcement", "rules"],
+  "additionalProperties": false
+}
