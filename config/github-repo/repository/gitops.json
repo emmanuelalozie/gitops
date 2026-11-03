@@ -2,7 +2,7 @@
   "name": "gitops",
   "description": "Simple repository to act as single source of truth to deliver Infrastructure as Code (IaC)",
   "homepage": "",
-  "topics": ["gitops", "infrastructure-as-code", "java", "gradle", "rest-assured", "github-actions", "drift-detection"],
+  "topics": ["gitops", "infrastructure-as-code", "java", "gradle", "github-actions", "drift-detection"],
   "has_issues": true,
   "has_projects": true,
   "has_wiki": true,
