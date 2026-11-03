@@ -46,6 +46,15 @@ const STDERR_LINES: usize = 40;
 pub struct Location {
     pub java: PathBuf,
     pub lib: PathBuf,
+    /// Every jar in `lib`, passed to Java one by one rather than as `lib/*`.
+    pub jars: Vec<PathBuf>,
+}
+
+impl Location {
+    /// For error messages: which Java ran which engine.
+    pub fn describe(&self) -> String {
+        format!("{} with the jars in {}", self.java.display(), self.lib.display())
+    }
 }
 
 /// Finds the engine, in order: `GITOPS_ENGINE_DIR`, the copy bundled with the app, then `build/engine` in the
@@ -53,11 +62,24 @@ pub struct Location {
 /// A folder counts when it has `lib/`; its `runtime/bin/java` is used when present, otherwise `JAVA_HOME`
 /// or `java` on the PATH.
 pub fn locate(env_dir: Option<PathBuf>, bundled: Option<PathBuf>, repo: &Path, java_home: Option<PathBuf>) -> Result<Location> {
-    let candidates: Vec<PathBuf> =
-        [env_dir, bundled, Some(repo.join("build").join("engine"))].into_iter().flatten().collect();
+    let candidates: Vec<PathBuf> = [env_dir, bundled, Some(repo.join("build").join("engine"))]
+        .into_iter()
+        .flatten()
+        // On Windows a path can arrive as \\?\C:\..., which Java can't use on a classpath. Back to C:\...
+        .map(|p| dunce::simplified(&p).to_path_buf())
+        .collect();
+    let mut skipped = Vec::new();
     for dir in &candidates {
         let lib = dir.join("lib");
-        if !lib.is_dir() {
+        let jars = jars(&lib);
+        // A folder without the engine's own jar is stale or half-copied: skip it rather than start a Java
+        // that fails with "Could not find or load main class gitops.Main".
+        if !jars.iter().any(|j| j.file_name().is_some_and(|n| n.to_string_lossy().starts_with("gitops-"))) {
+            if lib.is_dir() {
+                skipped.push(format!("{} (no gitops-*.jar in lib)", dir.display()));
+            } else {
+                skipped.push(format!("{} (missing)", dir.display()));
+            }
             continue;
         }
         let exe = if cfg!(windows) { "java.exe" } else { "java" };
@@ -65,20 +87,34 @@ pub fn locate(env_dir: Option<PathBuf>, bundled: Option<PathBuf>, repo: &Path, j
         let java = if bundled_java.is_file() {
             bundled_java
         } else if let Some(home) = java_home.as_ref().map(|h| h.join("bin").join(exe)).filter(|p| p.is_file()) {
-            home
+            dunce::simplified(&home).to_path_buf()
         } else {
             PathBuf::from(exe)
         };
-        return Ok(Location { java, lib });
+        return Ok(Location { java, lib, jars });
     }
     Err(AppError::new(
         "engine",
         "engine_missing",
         format!(
             "Couldn't find the GitOps engine. Looked in: {}. Run `./gradlew engineBundle` in the repository, or set GITOPS_ENGINE_DIR.",
-            candidates.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(", ")
+            skipped.join(", ")
         ),
     ))
+}
+
+/// The jars in a folder, sorted, so the classpath is the same every time.
+fn jars(lib: &Path) -> Vec<PathBuf> {
+    let mut jars: Vec<PathBuf> = std::fs::read_dir(lib)
+        .map(|entries| {
+            entries
+                .filter_map(|e| e.ok().map(|e| e.path()))
+                .filter(|p| p.is_file() && p.extension().is_some_and(|x| x.eq_ignore_ascii_case("jar")))
+                .collect()
+        })
+        .unwrap_or_default();
+    jars.sort();
+    jars
 }
 
 type Pending = Arc<Mutex<HashMap<u64, oneshot::Sender<std::result::Result<Value, AppError>>>>>;
@@ -90,6 +126,7 @@ pub struct Engine {
     next_id: AtomicU64,
     alive: Arc<AtomicBool>,
     stderr: Arc<Mutex<VecDeque<String>>>,
+    describe: String,
 }
 
 impl Engine {
@@ -101,7 +138,10 @@ impl Engine {
         env: &HashMap<String, String>,
         on_notification: impl Fn(&str, Value) + Send + 'static,
     ) -> Result<Engine> {
-        let classpath = location.lib.join("*");
+        // The jars one by one (";" on Windows, ":" elsewhere), so nothing depends on Java expanding "lib/*".
+        let classpath = std::env::join_paths(&location.jars)
+            .map_err(|e| AppError::new("engine", "engine_start", format!("Can't build the engine's classpath: {e}")))?;
+        let describe = location.describe();
         let mut command = Command::new(&location.java);
         command
             .arg("-cp")
@@ -122,7 +162,7 @@ impl Engine {
             command.creation_flags(CREATE_NO_WINDOW);
         }
         let mut child = command.spawn().map_err(|e| {
-            AppError::new("engine", "engine_start", format!("Couldn't start the engine with {}: {e}", location.java.display()))
+            AppError::new("engine", "engine_start", format!("Couldn't start the engine ({describe}): {e}"))
         })?;
         let stdin = child.stdin.take().ok_or_else(|| AppError::internal("engine stdin missing"))?;
         let stdout = child.stdout.take().ok_or_else(|| AppError::internal("engine stdout missing"))?;
@@ -148,6 +188,7 @@ impl Engine {
             let pending = pending.clone();
             let alive = alive.clone();
             let stderr = stderr.clone();
+            let describe = describe.clone();
             std::thread::Builder::new().name("engine-stdout".into()).spawn(move || {
                 for line in BufReader::new(stdout).lines().map_while(std::result::Result::ok) {
                     route(&line, &pending, &on_notification);
@@ -156,7 +197,7 @@ impl Engine {
                 alive.store(false, Ordering::SeqCst);
                 let tail = stderr.lock().unwrap().iter().cloned().collect::<Vec<_>>().join("\n");
                 for (_, waiter) in pending.lock().unwrap().drain() {
-                    let _ = waiter.send(Err(stopped(&tail)));
+                    let _ = waiter.send(Err(stopped(&tail, &describe)));
                 }
             })?;
         }
@@ -168,6 +209,7 @@ impl Engine {
             next_id: AtomicU64::new(1),
             alive,
             stderr,
+            describe,
         })
     }
 
@@ -178,7 +220,7 @@ impl Engine {
     /// Sends one request and waits for its answer. Applies may take minutes; everything else gets two.
     pub async fn call(&self, method: &str, params: Value) -> Result<Value> {
         if !self.is_alive() {
-            return Err(stopped(&self.stderr_tail()));
+            return Err(stopped(&self.stderr_tail(), &self.describe));
         }
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let (sender, receiver) = oneshot::channel();
@@ -186,7 +228,7 @@ impl Engine {
         let line = json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params}).to_string();
         {
             let mut stdin = self.stdin.lock().unwrap();
-            let pipe = stdin.as_mut().ok_or_else(|| stopped(""))?;
+            let pipe = stdin.as_mut().ok_or_else(|| stopped("", &self.describe))?;
             if let Err(e) = pipe.write_all(line.as_bytes()).and_then(|_| pipe.write_all(b"\n")).and_then(|_| pipe.flush()) {
                 self.pending.lock().unwrap().remove(&id);
                 return Err(AppError::new("engine", "engine_stopped", format!("Couldn't write to the engine: {e}")));
@@ -195,7 +237,7 @@ impl Engine {
         let limit = if method == "plan.apply" { Duration::from_secs(30 * 60) } else { Duration::from_secs(120) };
         match tokio::time::timeout(limit, receiver).await {
             Ok(Ok(result)) => result,
-            Ok(Err(_)) => Err(stopped(&self.stderr_tail())),
+            Ok(Err(_)) => Err(stopped(&self.stderr_tail(), &self.describe)),
             Err(_) => {
                 self.pending.lock().unwrap().remove(&id);
                 Err(AppError::new("engine", "timeout", format!("The engine didn't answer {method} within {}s", limit.as_secs())))
@@ -243,8 +285,8 @@ impl Drop for Engine {
     }
 }
 
-fn stopped(stderr: &str) -> AppError {
-    let mut message = String::from("The engine stopped.");
+fn stopped(stderr: &str, describe: &str) -> AppError {
+    let mut message = format!("The engine stopped ({describe}).");
     if !stderr.trim().is_empty() {
         message.push_str(" Its last output:\n");
         message.push_str(stderr.trim());
@@ -319,18 +361,42 @@ mod tests {
         assert_eq!(receiver.try_recv().unwrap().unwrap(), json!(42));
     }
 
+    fn engine_dir(dir: &Path, with_jar: bool) {
+        std::fs::create_dir_all(dir.join("lib")).unwrap();
+        std::fs::write(dir.join("lib/jackson-core.jar"), "").unwrap();
+        if with_jar {
+            std::fs::write(dir.join("lib/gitops-0.2.0.jar"), "").unwrap();
+        }
+    }
+
     #[test]
     fn locate_prefers_the_explicit_folder_then_the_bundle_then_the_repo() {
         let root = tempfile::tempdir().unwrap();
         let repo = root.path().join("repo");
-        std::fs::create_dir_all(repo.join("build/engine/lib")).unwrap();
+        engine_dir(&repo.join("build/engine"), true);
         let bundled = root.path().join("bundle");
-        std::fs::create_dir_all(bundled.join("lib")).unwrap();
+        engine_dir(&bundled, true);
 
-        assert_eq!(locate(None, Some(bundled.clone()), &repo, None).unwrap().lib, bundled.join("lib"));
+        let found = locate(None, Some(bundled.clone()), &repo, None).unwrap();
+        assert_eq!(found.lib, bundled.join("lib"));
+        // Every jar is named on the classpath, the engine's own included.
+        assert_eq!(found.jars, vec![bundled.join("lib/gitops-0.2.0.jar"), bundled.join("lib/jackson-core.jar")]);
         assert_eq!(locate(None, None, &repo, None).unwrap().lib, repo.join("build/engine/lib"));
         let missing = locate(Some(root.path().join("nope")), None, &root.path().join("empty"), None).unwrap_err();
         assert_eq!(missing.code, "engine_missing");
+    }
+
+    #[test]
+    fn locate_skips_a_folder_without_the_engine_jar() {
+        let root = tempfile::tempdir().unwrap();
+        let repo = root.path().join("repo");
+        engine_dir(&repo.join("build/engine"), true);
+        let stale = root.path().join("stale");
+        engine_dir(&stale, false);
+
+        assert_eq!(locate(None, Some(stale.clone()), &repo, None).unwrap().lib, repo.join("build/engine/lib"));
+        let error = locate(None, Some(stale), &root.path().join("other"), None).unwrap_err();
+        assert!(error.message.contains("no gitops-*.jar"), "{}", error.message);
     }
 
     #[test]
